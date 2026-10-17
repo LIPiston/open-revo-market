@@ -79,6 +79,7 @@ docs\
 * **插件市场是另一条链**：源码只在 `market\src\`，构建产物 `plugin-market\` 是生成物**别手改**；
   改完跑 `python build_market.py` 再跑 `bash _tools\market-verify.sh cyber`（另跑 `mono`），
   `PASS` 才许交付。目录改动要同步 `market\catalog.json` 与 `crawl_topic.py` 的 `CURATED` 集合。
-* **本目录只在权威树 `D:\LIPis\Documents\code\openrevo-plugins\` 维护。**
+* **本目录只在权威树里维护**（仓库 `LIPiston/open-revo-market`，2026-10-17 由 `open-revo-plugins` 更名；
+  本机克隆目录名可能仍是旧的 `openrevo-plugins\`）。
   历史上同一份内容散在两棵树里，已踩过「改了 A 树、审计了 B 树」的坑；
   harness 工作区那棵 `…\default-workspace\openrevo-win-skin\` 是 2026-10-04 改名前的快照，**已作废，不要再同步**。

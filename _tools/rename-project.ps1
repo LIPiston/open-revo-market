@@ -1,4 +1,4 @@
-﻿# rename-project.ps1 —— 把本仓库目录改名为 openrevo-plugins。
+﻿# rename-project.ps1 —— 把本仓库目录改名为 open-revo-market。
 #
 # 为什么需要脚本：Windows 不允许 rename 一个正被别的进程持有目录句柄（或当作 CWD）的目录，
 # 直接 mv / ren 会报 "Device or resource busy" 或「另一个程序正在使用此文件，进程无法访问。」。
@@ -22,7 +22,7 @@ if ($args -contains '-Force') { $Force = $true }
 $root    = Split-Path -Parent $PSScriptRoot          # 仓库根 = _tools 的上一级
 $parent  = Split-Path -Parent $root
 $oldName = Split-Path -Leaf $root
-$newName = 'openrevo-plugins'
+$newName = 'open-revo-market'
 $newPath = Join-Path $parent $newName
 
 Write-Output ("当前目录 : " + $root)

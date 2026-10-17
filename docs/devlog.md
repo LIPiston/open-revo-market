@@ -666,3 +666,49 @@ j = async (S = !1) => { b(!0); try { const D = await m("get_custom_plugins") || 
   基线重写过（修掉「宿主**没有**全局 `*{box-sizing}`」「装完**必须**重启」两条与发行版相反的旧结论），
   但用户随后卸载了 DSH，该副本与 `docs/README.md` 里指向它的两处同步约定一并移除 ——
   现在唯一的技能入口是本仓库的 `docs\SKILL.md`。
+
+## 17. 仓库更名 `open-revo-market` + README 全量重写（2026-10-17 第八轮）
+
+### 17.1 更名
+
+* GitHub 仓库 `LIPiston/open-revo-plugins` → **`LIPiston/open-revo-market`**（`main` 不变）。
+  旧地址在 GitHub 侧仍有重定向，旧的 `clone` / `raw` URL 短期仍可达，但已改为写新地址。
+* 本机克隆目录名**没有改**（仍是 `…\code\openrevo-plugins\`），二者无关。
+  `_tools\rename-project.ps1` 的目标名已同步改为 `open-revo-market`（BOM 保留，`Parser::ParseFile` 0 error）。
+* `git remote set-url origin https://github.com/LIPiston/open-revo-market.git`。
+
+### 17.2 功能性引用（会坏的那种）
+
+改的是**身份**，不是展示文案：
+
+| 位置 | 改动 |
+|---|---|
+| `market/src/market.js` `CONFIG.catalogUrls` | raw / jsDelivr 两个在线目录 URL |
+| `market/src/market.js` `SEED` | 两条内置条目的 `repo` |
+| `market/crawl_topic.py` `CURATED` | 本仓库两个插件的身份键 |
+| `market/crawl_topic.py` `local_entries()` | 本地兜底条目的 `repo` |
+| `market/catalog.json` | 两条的 `repo` |
+| `plugin-market/index.html` | 重新构建（`open-revo-plugins` 命中 0，`open-revo-market` 命中 4） |
+
+### 17.3 README 全量重写
+
+原标题「OpenRevo 原生 Windows 组件 UI 皮肤套件」已不反映现状（皮肤产物都删了），改为
+**「OpenRevo 插件市场 · `open-revo-market`」**，12 节重新编排：
+
+快速开始 → 市场（能做什么 / 为什么不能一键装 / 目录链 / 三条口径 / 源码构建）→ 仓库结构 →
+插件生态（五形态 / 三 sandbox / 13 条命令 / 刷新语义）→ 皮肤工具链 → 背景插件 → 预览审计 →
+验收 → 安装卸载 → 已知边界 → 文档地图 → 命名沿革。
+
+**保留**了皮肤侧的独有证据（换底色差分 130 px / 0.0145%、MAE 22.16 / 19.98、真机几何 1702×1213），
+标注为「0.8.8 基线，产物已删，仅供对照」——这些数字别处没有完整记录。
+
+**新增**第 10 节「已知边界」，把此前散落在各处的实话集中：市场不能一键装、真机 CDP 不可行、
+`widget`/`slot` 未实测、皮肤产物需重建、模型无图片输入、**仓库没有 `LICENSE` 文件**
+（但 `catalog.json` 条目声明 MIT —— 这是本轮发现的不一致，未擅自改动，留待作者决定）。
+
+### 17.4 验收
+
+* `python build_market.py --check` → 自检通过（49,815 字符）
+* `python market/validate_catalog.py market/catalog.json` → 2 条通过
+* `bash _tools/market-verify.sh cyber` / `mono` → 双 **PASS**（cards=2、badges=8、installed=2、0 JS 错误）
+* 已安装副本 `%APPDATA%\OpenRevo\plugins\plugin-market\` 与产物 `cmp` 三文件一致

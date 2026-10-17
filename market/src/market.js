@@ -18,8 +18,8 @@
 const CONFIG = {
   // 目录（catalog.json）来源，按顺序尝试，第一个成功即用。
   catalogUrls: [
-    'https://raw.githubusercontent.com/LIPiston/open-revo-plugins/main/market/catalog.json',
-    'https://cdn.jsdelivr.net/gh/LIPiston/open-revo-plugins@main/market/catalog.json',
+    'https://raw.githubusercontent.com/LIPiston/open-revo-market/main/market/catalog.json',
+    'https://cdn.jsdelivr.net/gh/LIPiston/open-revo-market@main/market/catalog.json',
   ],
   // 收录用的 GitHub topic。作者给自己的插件仓库打上它就自动进市场。
   topic: 'openrevo-plugin',
@@ -42,14 +42,14 @@ const SEED = {
       id: 'bg-custom', name: '自定义背景图', version: '1.0.0',
       author: 'OpenRevo Fluent Skin Kit', plugin_type: 'skin',
       description: '只提供背景图，不改动宿主默认界面（独立于任何皮肤）。由 build_background.py 生成。',
-      repo: 'LIPiston/open-revo-plugins', subpath: 'bg-custom', branch: 'main',
+      repo: 'LIPiston/open-revo-market', subpath: 'bg-custom', branch: 'main',
       stars: null, unreviewed: false, capabilities: null,
     },
     {
       id: 'plugin-market', name: '插件市场', version: '1.0.0',
       author: 'LIPiston', plugin_type: 'tab',
       description: '浏览 GitHub 上带 openrevo-plugin topic 的第三方插件，查看能力披露，并给出最短安装路径。',
-      repo: 'LIPiston/open-revo-plugins', subpath: 'plugin-market', branch: 'main',
+      repo: 'LIPiston/open-revo-market', subpath: 'plugin-market', branch: 'main',
       stars: null, unreviewed: false, capabilities: null,
     },
   ],

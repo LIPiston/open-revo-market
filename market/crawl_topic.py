@@ -39,8 +39,8 @@ KNOWN_TYPES = {"skin", "background", "tab", "widget", "slot", "service", "shell"
 
 # 本仓库自己的插件：目录里仍会列出，但标记成已审核（它们与目录同源同审）
 CURATED = {
-    "LIPiston/open-revo-plugins:bg-custom",
-    "LIPiston/open-revo-plugins:plugin-market",
+    "LIPiston/open-revo-market:bg-custom",
+    "LIPiston/open-revo-market:plugin-market",
 }
 
 
@@ -228,7 +228,7 @@ def local_entries() -> list[dict]:
             "author": m.get("author") or "",
             "plugin_type": m.get("plugin_type") or m.get("type") or "tab",
             "description": m.get("description") or "",
-            "repo": "LIPiston/open-revo-plugins",
+            "repo": "LIPiston/open-revo-market",
             "subpath": d.name,
             "branch": "main",
             "commit": None,

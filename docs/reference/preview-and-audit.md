@@ -46,7 +46,7 @@ CHROME="/c/Program Files/Google/Chrome/Application/chrome.exe"
   --user-data-dir="$(mktemp -d)" --hide-scrollbars --virtual-time-budget=3000 \
   --window-size=1240,900 --allow-file-access-from-files \
   --screenshot="D:\\…\\_shots\\out.png" \
-  "file:///D:/LIPis/Documents/code/openrevo-plugins/preview.html?notrans=1#skin-win11-dark"
+  "file:///D:/…/preview.html?notrans=1#skin-win11-dark"
 
 # computedStyle 审计（用 --dump-dom + 标记块提取）
 "$CHROME" … --dump-dom "file:///D:/…/preview.html?notrans=1&audit=1#skin-win11-dark" \

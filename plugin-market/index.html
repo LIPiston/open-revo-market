@@ -579,8 +579,8 @@ body { user-select: none; -webkit-user-select: none; }
 const CONFIG = {
   // 目录（catalog.json）来源，按顺序尝试，第一个成功即用。
   catalogUrls: [
-    'https://raw.githubusercontent.com/LIPiston/open-revo-plugins/main/market/catalog.json',
-    'https://cdn.jsdelivr.net/gh/LIPiston/open-revo-plugins@main/market/catalog.json',
+    'https://raw.githubusercontent.com/LIPiston/open-revo-market/main/market/catalog.json',
+    'https://cdn.jsdelivr.net/gh/LIPiston/open-revo-market@main/market/catalog.json',
   ],
   // 收录用的 GitHub topic。作者给自己的插件仓库打上它就自动进市场。
   topic: 'openrevo-plugin',
@@ -595,7 +595,7 @@ const CONFIG = {
  * 所以这里只是「catalog.json 缺失」时的兜底，两处应保持一致。 */
 /* 由 build_market.py 内联的离线目录（来源：market/catalog.json，
    与在线目录同构；在线目录可达时会被覆盖）。 */
-const SEED = {"format":1,"generatedAt":"2026-10-17T00:20:00+00:00","topic":"openrevo-plugin","count":2,"plugins":[{"id":"bg-custom","name":"自定义背景图","version":"1.0.0","author":"OpenRevo Fluent Skin Kit","plugin_type":"skin","description":"只提供背景图，不改动宿主默认界面（独立于任何皮肤）。由 build_background.py 生成。","repo":"LIPiston/open-revo-plugins","subpath":"bg-custom","branch":"main","commit":null,"stars":null,"updatedAt":null,"license":"MIT","unreviewed":false,"capabilities":null,"topics":["openrevo-plugin"],"homepage":null},{"id":"plugin-market","name":"插件市场","version":"1.0.0","author":"LIPiston","plugin_type":"tab","description":"浏览 GitHub 上带 openrevo-plugin topic 的第三方插件，查看能力披露，并给出最短安装路径。","repo":"LIPiston/open-revo-plugins","subpath":"plugin-market","branch":"main","commit":null,"stars":null,"updatedAt":null,"license":"MIT","unreviewed":false,"capabilities":null,"topics":["openrevo-plugin"],"homepage":null}]};
+const SEED = {"format":1,"generatedAt":"2026-10-17T00:20:00+00:00","topic":"openrevo-plugin","count":2,"plugins":[{"id":"bg-custom","name":"自定义背景图","version":"1.0.0","author":"OpenRevo Fluent Skin Kit","plugin_type":"skin","description":"只提供背景图，不改动宿主默认界面（独立于任何皮肤）。由 build_background.py 生成。","repo":"LIPiston/open-revo-market","subpath":"bg-custom","branch":"main","commit":null,"stars":null,"updatedAt":null,"license":"MIT","unreviewed":false,"capabilities":null,"topics":["openrevo-plugin"],"homepage":null},{"id":"plugin-market","name":"插件市场","version":"1.0.0","author":"LIPiston","plugin_type":"tab","description":"浏览 GitHub 上带 openrevo-plugin topic 的第三方插件，查看能力披露，并给出最短安装路径。","repo":"LIPiston/open-revo-market","subpath":"plugin-market","branch":"main","commit":null,"stars":null,"updatedAt":null,"license":"MIT","unreviewed":false,"capabilities":null,"topics":["openrevo-plugin"],"homepage":null}]};
 
 const TYPE_LABEL = {
   skin: '主窗皮肤', background: '背景壁纸', tab: '面板插槽',

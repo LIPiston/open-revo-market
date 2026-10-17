@@ -16,7 +16,7 @@
 
 | 事实 | 值 / 说明 |
 |---|---|
-| 权威树 | **只维护 `D:\LIPis\Documents\code\openrevo-plugins\`**。harness 工作区那棵 `…\default-workspace\openrevo-win-skin\` 是 2026-10-04 改名前的快照，**已作废**，不要再同步、不要拿它的预览页审计（踩过「改了 A 树、审计了 B 树」） |
+| 权威树 | **只维护一棵**：GitHub 仓库 `LIPiston/open-revo-market`（2026-10-17 由 `open-revo-plugins` 更名，旧地址重定向）。本机克隆目录名可能仍是旧的 `…\openrevo-plugins\`。harness 工作区那棵 `…\default-workspace\openrevo-win-skin\` 是 2026-10-04 改名前的快照，**已作废**，不要再同步、不要拿它的预览页审计（踩过「改了 A 树、审计了 B 树」） |
 | 宿主 exe | `D:\Program Files\OpenRevo\open-revo.exe`，**唯一真值来源** |
 | **当前宿主版本 = 0.9.1** | exe **9,368,576 B**、mtime 2026-10-16 20:29、`FileVersion`/`ProductVersion` 均 `0.9.1`。资产：`/assets/index-CXze12DN.js`（641,939 B）、`/assets/index-CQ_flESn.css`（59,884 B），抽取物在 `_extracted/v091/`。**本技能包的皮肤侧数字（132 条断言、几何、MAE）测于 0.8.8，仅作回归对比** |
 | **宿主会自我更新并重启** | 真实发生过两次（8,490,496 → 8,496,640 B；8,826,368 B(0.8.8) → 9,368,576 B(0.9.1)）⇒ 一切**字节偏移 / 文件大小**断言当场作废。动手前先比 exe 的 mtime/大小与进程 StartTime；判断宿主前端是否变化要用**资产文件名里的内容哈希**（`index-<hash>.js` 变了就是前端变了）——**文件名里的哈希就是内容哈希** |
@@ -81,7 +81,7 @@
 | `_extracted/host-shell.css` | 宿主外壳/主题子集（预览页加载它） |
 | `_extracted/new-build/` | 早期自我更新后的重新抽取（复核用，见 `devlog.md` §9） |
 | `_shots/market-{cyber,mono}.png`、`market-modal-cyber.png` | 市场验收出图（`market-verify.sh` / `market-shots.sh` 产物） |
-| `market/catalog.json` | 市场目录（构建时内联为离线兜底）；在线副本在 `raw.githubusercontent.com/LIPiston/open-revo-plugins/main/market/catalog.json`，**尚未 push 时 `fetch` 得 HTTP 404**，UI 会如实回落到内置目录 |
+| `market/catalog.json` | 市场目录（构建时内联为离线兜底）；在线副本在 `raw.githubusercontent.com/LIPiston/open-revo-market/main/market/catalog.json`（仓库 2026-10-17 由 `open-revo-plugins` 更名，旧地址仍重定向），**尚未 push 时 `fetch` 得 HTTP 404**，UI 会如实回落到内置目录 |
 | `_shots\real-dash-1500.png`（同批 `real-dash-1200.png`） | 真机主窗成品：侧栏生效 + 不透明的像素证据（1702×1213，**0.8.8 基线**） |
 | `_shots\real-mini-clean.png` | 真机迷你面板（无遮挡，0.8.8 基线） |
 | `_shots\mini-<id>.png` | 四套迷你变体截图（`census.py` 的输入，0.8.8 基线） |

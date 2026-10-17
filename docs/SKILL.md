@@ -15,7 +15,7 @@ description: 为 OpenRevo（open-revo.exe）开发、修改、验证第三方插
 
 | 项 | 值 |
 |---|---|
-| 权威树（只维护这一棵） | `D:\LIPis\Documents\code\openrevo-plugins\` |
+| 权威树（只维护这一棵） | 仓库 `LIPiston/open-revo-market`（2026-10-17 由 `open-revo-plugins` 更名）；本机克隆目录名可能仍是旧的 `…\openrevo-plugins\` |
 | 宿主 exe（**唯一真值来源**） | `D:\Program Files\OpenRevo\open-revo.exe` |
 | 宿主版本 | **0.9.1**（9,368,576 B，mtime 2026-10-16 20:29） |
 | 插件安装位 | `%APPDATA%\OpenRevo\plugins\<plugin_id>\` |
