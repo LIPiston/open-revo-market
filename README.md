@@ -3,17 +3,35 @@
 按《OpenRevo 第三方插件开发手册 v1.0》**用例 7（皮肤插件 / skin）** 开发的四套原生 Windows 组件风格皮肤，
 让 OpenRevo 主控制台变成 WinUI / Fluent Design 的原生 Windows 观感（Mica 材质、Fluent 控件、Segoe UI Variable 字体）。
 
-> **已经装好了。** 四套皮肤已安装到 `C:\Users\LIPis\AppData\Roaming\OpenRevo\plugins\`，
-> 打开 OpenRevo 主界面 → 【插件】选项卡 → 右上角【刷新】→ 拨动开关即可激活（四套皮肤之间互斥，同时只能启用一套）。
+> ⚠️ **皮肤目录已移除（2026-10-17）。** 仓库里原来的四个产物目录
+> `skin-win11-light\` / `skin-win11-dark\` / `skin-win10-light\` / `skin-win10-dark\` **已删除**，
+> 宿主 `config.json` 里对应的残留开关也一并清掉。**构建工具链保留**（`build_skins.py` + `src\base.css`），
+> 需要时随时可重建：
+>
+> ```bash
+> python build_skins.py            # 重新生成四个 skin-<id>\ 子目录
+> python build_skins.py --install  # 生成并安装到 %APPDATA%\OpenRevo\plugins\
+> ```
+>
+> 下面 §1–§10 仍是这四套皮肤的**完整设计与验收记录**（工具链与文档都在，内容没有作废）。
+> 之所以保留工具链：背景插件 `bg-custom` 依赖它（`build_background.py` / `bg_common.py` 都 `import build_skins`），
+> 删掉会连带弄坏背景插件。
 
 另有一个**独立于皮肤**的插件 `bg-custom`：只把一张本地图片铺成窗口背景，不改配色与布局（见 **§11**）。
-它与本套 Fluent 皮肤**没有依赖关系**。⚠️ **0.8.7 时代它在宿主层面与皮肤互斥**（只有一条 CSS 注入通道、
+它原先与 Fluent 皮肤**没有依赖关系**；⚠️ **0.8.7 时代它在宿主层面与皮肤互斥**（只有一条 CSS 注入通道、
 `active_skin` 单值）；**0.8.8 起宿主新增 `plugin_type:"background"` 的第二条通道，两者可同时启用**
-（详见 §11.3）。本仓库当前产物仍是 `plugin_type:"skin"` 形态，所以「装上会顶掉皮肤」在**改造前**依然成立。
+（详见 §11.3）。本仓库当前产物仍是 `plugin_type:"skin"` 形态。
+
+再另有一个**插件市场** `plugin-market`（新增【插件市场】选项卡，自助浏览/获取插件，见 **§12**）：
+它按 GitHub topic `openrevo-plugin` 自动收录第三方插件。它与皮肤/背景**无关**，
+基线也不同（皮肤/背景针对 **0.8.8**，市场针对 **0.9.1**，因为宿主自我更新过）。
 
 ---
 
-## 1. 四套皮肤
+## 1. 四套皮肤（设计规格；产物需重建）
+
+> 下表是四套皮肤的**设计规格**。产物目录已于 2026-10-17 删除（见文首说明），
+> 跑一次 `python build_skins.py` 即可按规格重新生成。
 
 | 插件 ID | 风格 | 强调色 | 圆角 | 声明视窗 | 字体 |
 |---|---|---|---|---|---|
@@ -65,8 +83,11 @@ Win11 与 Win10 的差异不只是配色，而是整套 Fluent 世代语汇：
 
 ## 2. 目录结构与安装位置
 
+> **产物需重建**：下面这份目录树是 `python build_skins.py` 的**输出**（仓库根下的四个子目录），
+> 以及 `--install` 后插件目录里的副本。**当前仓库与插件目录里都没有这四套皮肤**（2026-10-17 已删）。
+
 ```
-C:\Users\LIPis\AppData\Roaming\OpenRevo\plugins\
+<仓库根>\                                   # 构建产物落在这里
 ├── skin-win11-light\
 │   ├── manifest.json      # ↑ 每套皮肤只含这三样，符合手册 §7 的皮肤目录规范
 │   ├── theme.css          #   55,967 B，全部样式集中在一个文件
@@ -75,6 +96,9 @@ C:\Users\LIPis\AppData\Roaming\OpenRevo\plugins\
 ├── skin-win11-dark\      …（同上）55,867 B
 ├── skin-win10-light\     …（同上）55,776 B
 └── skin-win10-dark\      …（同上）55,701 B
+
+C:\Users\LIPis\AppData\Roaming\OpenRevo\plugins\   # --install 后的副本位置
+└── plugin-market\        # 当前插件目录里只有市场（皮肤未装）
 ```
 
 为什么只有一个 `theme.css`？因为宿主是把它整份注入 `<style id="openrevo-custom-skin">`（手册 §7），
@@ -96,13 +120,12 @@ C:\Users\LIPis\AppData\Roaming\OpenRevo\plugins\
 * 改名是**纯命名**：四套 `theme.css` / `manifest.json` 除 ID 字符串外逐字节未变
   （与改名前的 `dist\<旧id>\` 产物 `cmp` 一致），宿主行为不受影响。
 * 尺寸因此每套少了 440 B —— 新 ID 比旧 ID 短 1 个字符，而它在一个文件里出现约 440 次。
-* 已装副本也已同步换名：`%APPDATA%\OpenRevo\plugins\` 下的旧目录已删除，四套新目录已在位。
-* ⚠️ `config.json` 的 `active_skin` **仍是旧值 `win11-fluent-dark`**（备份 `config.json.bak-skinrename`）。
-  改写它必须在**宿主停机时**做 —— 宿主运行中会把 `config.json` 按内存里的旧值整份覆盖回去
-  （2026-10-04 10:13:06 实测：改写后约 6 分钟被覆盖，同一秒落盘的 `models.json` 可佐证是宿主写的）。
-  正确流程：提权停宿主 → 改 `active_skin` 为 `skin-win11-dark` → 启宿主。
-  宿主只在启动时枚举插件目录，所以**改完必须重启宿主才认新 ID**（0.8.8 起插件列表可点【刷新】重扫，
-  但 `active_skin` 指向已删 ID 这种残局仍必须停机改配置 + 重启，见 §11.2、`pitfalls.md` #37）。
+* 已装副本当时已同步换名：`%APPDATA%\OpenRevo\plugins\` 下的旧目录删除、四套新目录就位。
+  （**2026-10-17 起这四套已全部从仓库与插件目录移除**，见文首说明；本节保留为历史记录。）
+* ⚠️ 改 `active_skin` 必须在**宿主停机时**做 —— 宿主运行中持有权威内存态、会把 `config.json` 整份覆盖回去。
+  正确流程：提权停宿主 → 改 `active_skin` → 启宿主（`_tools\set-active-skin.ps1` 已封装守卫）。
+  当前插件页【刷新】= 重扫列表 **+ 热重载当前样式**，装新目录/改 `theme.css` 点一次【刷新】即可；
+  但 `active_skin` 指向已删 ID 这种残局仍必须停机改配置 + 重启（见 §11.2、`pitfalls.md` #37）。
 ## 3. 本地预览（不装、不改宿主也能看效果）
 
 直接双击打开：
@@ -143,19 +166,19 @@ URL 参数：
 
 ```
 openrevo-plugins\                # ← 项目根（2026-10-04 由 openrevo-win-skin 改名）
-├── skin-win11-light\        # 子目录项目 = 一套可直接装进 plugins\ 的皮肤插件（与已安装内容逐字节一致）
-│   ├── manifest.json        #   ├─ 这三样就是插件的全部
-│   ├── theme.css            #   │
+├── skin-win11-light\        # ✗ 已删（2026-10-17）。`python build_skins.py` 会按 §1 的规格重建
+│   ├── manifest.json        #   子目录项目 = 一套可直接装进 plugins\ 的皮肤插件
+│   ├── theme.css            #   ├─ 这三样就是插件的全部
 │   └── assets\preview.png   #   └─ 插件管理面板缩略图（640×360）
-├── skin-win11-dark\         …（同上）
-├── skin-win10-light\        …（同上）
-├── skin-win10-dark\         …（同上）
-├── bg-custom\               # ★ 独立背景插件（可选）：只铺背景，与上面四套皮肤无依赖
-│   ├── manifest.json        #   plugin_type:"skin"（宿主唯一能注入 CSS 的插件形态）
+├── skin-win11-dark\         ✗ 已删（同上）
+├── skin-win10-light\        ✗ 已删（同上）
+├── skin-win10-dark\         ✗ 已删（同上）
+├── bg-custom\               # ★ 独立背景插件（可选）：只铺背景，与四套皮肤无依赖
+│   ├── manifest.json        #   plugin_type:"skin"（当前产物形态；0.8.8 起可改 background 通道）
 │   ├── theme.css            #   139 KB = 3 条背景规则 + 内联 base64 图片
 │   └── assets\              #   background.jpg（成品）+ preview.png（卡片缩略图）
 ├── bg.config.json           # ★ 背景构建真值：源图路径 + fit/position/overlay/blur/scope/targets
-├── bg_common.py             # ★ 背景共享层：配置、颜色、PIL 编码、CSS 渲染
+├── bg_common.py             # ★ 背景共享层：配置、颜色、PIL 编码、CSS 渲染（import build_skins）
 ├── build_background.py      # ★ 背景 CLI：set / off / build / install / status
 ├── src\background.css       # ★ 背景段模板（__BG_*__ 占位符 + scope 裁剪标记）
 ├── assets\sample-wallpaper.jpg  # ★ 确定性示例图（任何 clone 都能 build 出同一产物）
@@ -333,9 +356,11 @@ bash _tools/verify-bg.sh off                              # 停用后的零泄�
 > * `file://` 页面里跨文档样式表的 `cssRules` 会抛 SecurityError（规则数误报 `none`），要加 `--allow-file-access-from-files`。
 > * 别用“数某个灰色的像素个数”判断透明度：文字抗锯齿会撞上背景色，必须用**换底色差分**。
 > * `?bare=1` 里 `.pv-stage` 的内联 `width/height` 必须用 `!important` 覆盖，否则窗口填不满视口，截图底部会留一条页面底色带（曾把这条带误判成“窗口漏色”）。
-> * **宿主只在启动时枚举插件目录**（0.8.7 时如此；**0.8.8 起插件页【刷新】可重扫列表，`v0.8.8-dbfe615` 起连样式一起热重载**）：装完皮肤不重启宿主，跑着的旧进程里根本没有这套皮肤（当时 `pid 13128` 启动于 16:24，
->   而插件文件是 18:30 写的），截图像素自然会误导成“皮肤没生效”。判断真机状态前先比 `_tools\when.ps1`（进程启动时间）
->   与插件目录 mtime。重启要用提权路径 `_tools\kill-and-start.ps1`（`taskkill` 对这个 requireAdministrator 进程是「拒绝访问」）。
+> * **让宿主认到新目录**：插件页【刷新】= 重扫列表 **+ 热重载当前样式**，所以装完皮肤点一次【刷新】即可生效；
+>   `active_skin` 指向**已删 ID** 时才是例外，须「停 → 改 → 启」。
+>   判断真机状态前先比 `_tools\when.ps1`（进程启动时间）与插件目录 mtime —— 进程比插件文件老时，
+>   截图像素会误导成「皮肤没生效」。重启要用提权路径 `_tools\kill-and-start.ps1`
+>   （`taskkill` 对这个 requireAdministrator 进程是「拒绝访问」）。
 > * **判读真机截图前必须先确认窗口 z 序与遮挡**：第一次抓到的 615×916 图里左侧 45% 是一条纯 `(34,34,34)` 竖带，
 >   一度被当成宿主底色；`_tools\who.ps1`（`WindowFromPoint` + `GetAncestor`）证明那是 **QQ** 的窗口
 >   （`rect=(569,237)-(2230,1273)`，右边界 2230 与竖带终点完全吻合）。注意 `WindowFromPoint` 会跳过 Tauri 的透明/分层窗口，
@@ -367,6 +392,13 @@ bash _tools/verify-bg.sh off                              # 停用后的零泄�
 * **停用**：插件面板里把开关拨回即可，宿主会立刻移除注入的 `<style>`，并回退默认主题与 960×740 视窗基准（手册 §7 L624）。
 * **卸载**：删除对应的 `plugins\<skin_id>\` 目录，并在 `%APPDATA%\OpenRevo\config.json` 里清掉
   `custom_plugin_toggles` 与 `widget_positions` 中残留的该 ID（若存在）。
+
+> **本节已被执行过一次（2026-10-17）**：四套皮肤的仓库产物目录 + 宿主 `config.json` 里的
+> `custom_plugin_toggles` / `widget_positions` 残留（含 `eva01-core`）都按上面这条流程清掉了。
+> 备份在 `%APPDATA%\OpenRevo\config.json.bak-skincleanup-20261017-075507`。
+> 注意：宿主**运行中**会周期性把 `config.json` 按内存态整份回写，所以改配置前若刚在宿主里
+> 动过任何开关，先记下当前值再改，或停机改；本次实测该回写**只在用户操作时发生**（静置 30 s 无变化，
+> 期间唯一的字节变化来自一次真实的插件开关点击）。
 
 ## 10. 当前未做的事
 
