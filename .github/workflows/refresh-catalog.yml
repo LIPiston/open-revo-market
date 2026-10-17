@@ -1,0 +1,50 @@
+name: Refresh plugin catalog
+
+# 每小时增量刷新市场目录：抓 GitHub 上带 openrevo-plugin topic 的仓库。
+# 目录是纯派生物 —— 每次全量重爬 + 与上一份合并（保留人工审核标记），
+# 然后只在内容真的变了时提交，避免空转出一堆无意义的历史。
+
+on:
+  schedule:
+    - cron: '17 * * * *'      # 每小时第 17 分钟，错开整点高峰
+  workflow_dispatch:           # 也允许手动触发
+
+permissions:
+  contents: write              # 需要写回 catalog.json
+
+concurrency:
+  group: refresh-catalog
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Crawl openrevo-plugin topic
+        env:
+          # 用内置 token 提高限额（60/h → 5000/h）；抓取失败会非零退出且不写文件
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python market/crawl_topic.py --merge --out market/catalog.json
+
+      - name: Validate catalog
+        run: python market/validate_catalog.py market/catalog.json
+
+      - name: Commit if changed
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- market/catalog.json; then
+            echo "目录无变化，跳过提交"
+            exit 0
+          fi
+          COUNT=$(python -c "import json;print(json.load(open('market/catalog.json',encoding='utf-8'))['count'])")
+          git add market/catalog.json
+          git commit -m "chore(market): 刷新插件目录（${COUNT} 条）"
+          git push

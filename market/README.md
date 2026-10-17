@@ -1,0 +1,127 @@
+# 插件市场（OpenRevo 第三方插件市场）
+
+OpenRevo 主控台里的一个 `tab` 页签：**浏览**第三方插件、看**能力披露**、拿到**最短安装路径**。
+收录入口是 GitHub topic —— 作者给自己的插件仓库打上 `openrevo-plugin`，它就会自动出现在市场里。
+
+```
+别人打 topic ──► 爬虫（每小时/可手动）──► market/catalog.json ──► 市场页签
+                     ↑                                              │
+              你也可以点「实时发现」直接查 GitHub，不等爬虫 ◄──────────┘
+```
+
+---
+
+## 一分钟上手
+
+```bash
+# 1. 构建 + 安装到 %APPDATA%\OpenRevo\plugins\plugin-market\
+python build_market.py --install
+
+# 2. 打开 OpenRevo → 侧边栏【插件】页 → 右上角【刷新】
+#    顶栏会出现「插件市场」页签，点进去即可
+```
+
+产物是**单文件** `plugin-market/index.html`（CSS/JS 全内联）。
+这不是偷懒：宿主用 `srcDoc` 把插件 HTML 注入 iframe，基准 URL 是 `tauri://localhost`，
+相对路径的 `<link>` / `<script src>` 必然 404，所以必须单文件。
+
+---
+
+## 这个市场能做什么、不能做什么
+
+**能**：
+
+- 拉取策展目录，按类型分组（**已审核** / **未审核**）并提供搜索、筛选、排序；
+- **实时发现**：直接查 GitHub 上带 `openrevo-plugin` topic 的仓库，作者打完 topic 立刻可见，不必等爬虫；
+- 通过宿主的 `get_custom_plugins`（只读）**认出已安装**的插件并打标；
+- **能力披露**：逐条列出静态扫描检出的联网 / 文件读写等能力，危险组合单列（如"读凭据 + 有网络"）；
+- 给出一条**可直接粘贴的 PowerShell 安装命令**，把仓库（或其中某个子目录）放到插件目录。
+
+**不能**（这是宿主限制，不是市场偷懒）：
+
+> **v0.9.1 宿主没有开放任何安装接口。**
+> 实测：Rust 命令表里没有 `install_plugin` / `uninstall_plugin` / `reload_plugin`，
+> 也没有写插件目录的 IPC；Tauri 侧只挂了 `autostart` 与 `single-instance`，
+> **没有** `fs` / `dialog` / `shell` 插件；而 `tab` 插件的 iframe 是
+> `sandbox="allow-scripts allow-forms allow-same-origin"`，**没有 `allow-downloads`**，
+> 下载动作会被浏览器拦掉。
+
+所以点【安装】不会替你把文件下下来，而是弹出一张卡片：**复制命令 → 终端粘一次 → 回插件页刷新**。
+取证细节（含 exe 偏移与逐字代码）见 [`../docs/reference/market-host-constraints.md`](../docs/reference/market-host-constraints.md)。
+
+---
+
+## 给自己的插件上架
+
+**快车道（零审核，自动收录）**：给你的插件仓库打上 topic `openrevo-plugin`。
+
+```bash
+gh repo edit --add-topic openrevo-plugin
+```
+
+大约一小时后（或本地立刻用市场的【实时发现】按钮）就能看到它。快车道条目在 UI 上**显著标注"未审核"**。
+
+**正典（进"已审核"分区）**：往 `market/catalog.json` 提一个 PR，
+把 `unreviewed` 改成 `false`。爬虫合并时会**保留**这个标记，不会把它翻回未审核。
+
+作者需要知道的约定：
+
+| 项 | 约定 |
+|---|---|
+| 插件目录 | 仓库根目录放 `manifest.json`，**或**某个子目录里放（monorepo 会扫一层，自动识别） |
+| 必填 | `manifest.json` 的 `id` / `name` / `version` / `plugin_type`。`id` 就是安装后的目录名 |
+| `plugin_type` | `skin` / `background` / `tab` / `widget` / `slot`（v0.9.1 实测枚举） |
+| 描述 | 写清**做什么**；不要把内容写成"最好的插件"这种无法核对的话 |
+| 能力 | 由工具侧扫描填写，作者手写无效 |
+
+---
+
+## 仓库结构
+
+```
+market/
+├── src/
+│   ├── index.template.html   # 模板（含两个占位符）
+│   ├── market.css            # 样式（内联进产物）
+│   └── market.js             # 应用逻辑（内联进产物）
+├── crawl_topic.py            # 抓 openrevo-plugin topic → catalog.json
+├── validate_catalog.py       # 目录校验（E1–E10）
+├── catalog.json              # 生成的目录（CI 每小时刷新）
+└── PLUGIN_README.md          # 会随插件一起装进插件目录
+
+build_market.py               # 把 src/ 内联成单文件，并做产物自检
+plugin-market/                # 构建产物（可直接拷进插件目录）
+_tools/
+├── market-preview.html       # 等价宿主环境预览（复刻 srcdoc + sandbox + 桥）
+├── market-verify.sh          # 验收闸：JS 错误 / 渲染计数 / 安装弹窗
+└── market-shots.sh           # 出图（干净版 + 弹窗）
+```
+
+## 开发
+
+```bash
+python build_market.py             # 构建 + 产物自检
+python build_market.py --check     # 只自检
+
+# 出图看观感（会起一个本地 HTTP 服务）
+bash _tools/market-shots.sh        # → _shots/market-clean-{cyber,mono}.png、market-modal-cyber.png
+
+# 验收闸（PASS 才许交付）
+bash _tools/market-verify.sh cyber
+
+# 目录
+python market/crawl_topic.py --merge    # 需要 GITHUB_TOKEN
+python market/validate_catalog.py
+```
+
+改完样式或逻辑，**只改 `market/src/`**，`plugin-market/` 是生成物，别手改。
+
+---
+
+## 免责声明
+
+> 插件是第三方代码，**以你的权限运行**。本市场只做来源绑定与静态披露，**不构成安全审计**。
+> 安装即把代码写入插件目录，卸载即删除对应文件夹 —— 请只安装你信任的来源。
+
+`tab` 插件与宿主**同源**（`allow-same-origin`），意味着插件能读到宿主页面的 DOM 并调用宿主的 IPC。
+这不代表沙盒无用，但**不要**把"跑在 iframe 里"当成安全边界。市场在 UI 上刻意不写"安全隔离"这类措辞。

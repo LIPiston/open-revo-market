@@ -10,3 +10,11 @@ __pycache__/
 
 # 注意：bg-custom\ **要**入库（与四套 skin-*\ 同等对待）。
 # 它同样可复现，但它是这个功能的默认交付物 —— 入库才能 `git clone` 后即装即用。
+
+# 市场验收的 --dump-dom 转储：只是 _tools/market-verify.sh 读 diag 用的中间件，
+# 同一个 PNG 才是证据。入库会是每次跑都变的大段 HTML 噪声。
+_shots/*.dom.html
+
+# 同样口径：plugin-market\ 是市场的默认交付物，**要**入库；
+# market\ 是它的源码，同样入库。_extracted\v091\ 是宿主取证的原始件，入库（与本仓既有 _extracted\ 一致）。
+# 不在此处排除，无需额外规则。

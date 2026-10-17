@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="cyber">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>插件市场</title>
+<!--
+  OpenRevo 插件市场 · 单文件产物
+  由 `python build_market.py` 从 market/src/{market.css,market.js} 生成，请勿直接手改本文件。
+
+  为什么必须单文件：宿主把插件 index.html 作为 srcdoc 注入 iframe，其基准 URL 是宿主文档
+  （tauri://localhost），相对路径资源取不到插件目录。把所有样式与脚本内联进来，
+  既零 404，也不依赖宿主的资产内联器。
+-->
+<style>
+/*__MARKET_CSS__*/
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+/*__MARKET_JS__*/
+</script>
+</body>
+</html>

@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>OpenRevo 插件市场 · 预览（复刻宿主 srcdoc 注入）</title>
+<style>
+  html, body { height: 100%; margin: 0; background: #0b0e14; color: #f8fafc;
+    font-family: Inter, "Segoe UI", "Microsoft YaHei", sans-serif; overflow: hidden; }
+  /* 复刻宿主 .openrevo-shell 的观感，让截图接近真实上下文 */
+  .frame { position: absolute; inset: 0; display: flex; flex-direction: column; }
+  .chrome { flex-shrink: 0; padding: 8px 14px; background: #00000040; border-bottom: 1px solid #ffffff14;
+    font-size: 11px; color: #94a3b8; display: flex; gap: 10px; align-items: center; }
+  .chrome b { color: #f8fafc; font-weight: 600; }
+  .chrome .tag { padding: 1px 7px; border-radius: 9999px; background: #38bdf826; color: #7dd3fc;
+    border: 1px solid #38bdf84d; font-size: 9.5px; font-weight: 600; }
+  .vp { flex: 1 1 0%; min-height: 0; padding: 16px; overflow: hidden; box-sizing: border-box; }
+  iframe { width: 100%; height: 100%; border: none; background: transparent; display: block; }
+  #diag { position: fixed; right: 8px; bottom: 8px; z-index: 99; max-width: 46vw; padding: 8px 10px;
+    background: #0f172ae6; border: 1px solid #ffffff26; border-radius: 8px; font: 10px/1.5 Consolas, monospace;
+    color: #94a3b8; white-space: pre-wrap; max-height: 40vh; overflow: auto; }
+  #diag.err { border-color: #ef4444; color: #fecaca; }
+  #diag.ok { border-color: #10b981; color: #a7f3d0; }
+</style>
+</head>
+<body>
+<div class="frame">
+  <div class="chrome"><b>OPENREVO</b><span class="tag">面板插槽</span><span>插件市场 · 预览</span>
+    <span style="margin-left:auto" id="themes"></span></div>
+  <div class="vp"><iframe id="f" sandbox="allow-scripts allow-forms allow-same-origin"></iframe></div>
+</div>
+<pre id="diag">booting…</pre>
+<script>
+/* ============================================================================
+ * 预览宿主：复刻 v0.9.1 真实宿主对 tab 插件的处理方式
+ *   - iframe 的 sandbox 逐字照抄：allow-scripts allow-forms allow-same-origin
+ *   - 用 srcdoc 注入插件 index.html（宿主走 load_plugin_html 后 srcDoc 注入）
+ *   - 父窗口挂 __TAURI_INTERNALS__，模拟 Tauri 桥，供插件调用只读命令
+ * 目的：在真实宿主里发现问题前，先在等价环境里跑出 JS 错误与渲染结果。
+ * ========================================================================== */
+const params = new URLSearchParams(location.search);
+const THEME = params.get('theme') || 'cyber';
+// ?nodiag=1 隐藏诊断浮层，供人眼/像素检查版式（验收脚本仍走带浮层的那条路）
+const SHOW_DIAG = params.get('nodiag') !== '1';
+document.documentElement.setAttribute('data-theme', THEME);
+if (!SHOW_DIAG) {
+  const d0 = document.getElementById('diag');
+  if (d0) d0.style.display = 'none';
+}
+
+const CALLS = [];
+window.__TAURI_INTERNALS__ = {
+  invoke: async (cmd, args) => {
+    CALLS.push([cmd, args]);
+    if (cmd === 'get_custom_plugins') {
+      // 模拟：仓库自带的 2 个插件都已安装，市场应认出「已安装」
+      return [
+        { id: 'bg-custom', plugin_type: 'skin', enabled: false },
+        { id: 'plugin-market', plugin_type: 'tab', enabled: true },
+      ];
+    }
+    if (cmd === 'open_plugins_dir') return 'opened';
+    return { ok: true, cmd };
+  },
+};
+window.__OPENREVO_BRIDGE__ = { invoke: window.__TAURI_INTERNALS__.invoke };
+
+const diag = document.getElementById('diag');
+const errors = [];
+
+// 抓父窗口能看到的子窗口错误（同源，可直接读）
+const f = document.getElementById('f');
+
+async function run() {
+  let html;
+  try {
+    const r = await fetch('../plugin-market/index.html?t=' + Date.now());
+    html = await r.text();
+  } catch (e) {
+    diag.className = 'err'; diag.textContent = '无法读取 plugin-market/index.html：' + e.message;
+    return;
+  }
+  f.srcdoc = html;
+
+  // 装好错误钩子（子窗口与父窗口同源，可直接读写）
+  f.addEventListener('load', () => {
+    const w = f.contentWindow;
+    try {
+      w.addEventListener('error', (ev) => errors.push('error: ' + (ev.message || ev.type)));
+      w.addEventListener('unhandledrejection', (ev) => errors.push('rejection: ' + String(ev.reason && ev.reason.message || ev.reason)));
+    } catch (e) { errors.push('hook fail: ' + e.message); }
+  });
+}
+
+function snapshot() {
+  const w = f.contentWindow;
+  if (!w || !w.document) return { ready: false };
+  const d = w.document;
+  const app = d.getElementById('app');
+  const cards = d.querySelectorAll('.mkt-card');
+  const toast = d.getElementById('toast');
+  return {
+    ready: !!(app && app.children.length),
+    theme: d.documentElement.getAttribute('data-theme'),
+    parentTheme: (function(){ try { return w.parent.document.documentElement.getAttribute('data-theme'); } catch(e){ return 'ERR:'+e.message; } })(),
+    badgeColor: (function(){ const b=d.querySelector('.mkt-badge.type-skin'); return b? getComputedStyle(b).color : null; })(),
+    badgeBg: (function(){ const b=d.querySelector('.mkt-badge.type-skin'); return b? getComputedStyle(b).backgroundColor : null; })(),
+    appChildren: app ? app.children.length : 0,
+    cards: cards.length,
+    sources: d.querySelectorAll('.mkt-src').length,
+    badges: d.querySelectorAll('.mkt-badge').length,
+    installedBadges: d.querySelectorAll('.mkt-badge.ok').length,
+    unreviewed: d.querySelectorAll('.mkt-badge.warn').length,
+    filterLabels: Array.from(d.querySelectorAll('.mkt-src')).map((b) => b.textContent.trim()).join(' | '),
+    firstCard: (d.querySelector('.mkt-card-name') || {}).textContent || null,
+    meta: (d.querySelector('.mkt-meta') || {}).textContent || null,
+    footer: (d.querySelector('.mkt-footer') || {}).textContent || null,
+    toast: toast ? toast.textContent : null,
+  };
+}
+
+// 主题切换按钮（仅预览用）
+document.getElementById('themes').innerHTML =
+  ['cyber', 'mono', 'light'].map((t) =>
+    `<button data-t="${t}" style="margin-left:4px;padding:2px 8px;font:inherit;border-radius:6px;
+     border:1px solid #ffffff26;background:#ffffff0d;color:inherit;cursor:pointer">${t}</button>`).join('');
+document.getElementById('themes').addEventListener('click', (e) => {
+  const t = e.target.getAttribute('data-t');
+  if (!t) return;
+  document.documentElement.setAttribute('data-theme', t);
+  try { f.contentWindow.document.documentElement.setAttribute('data-theme', t); } catch (_) {}
+});
+
+run();
+
+// 供外部（截图脚本 / CDP）取用的探针
+window.__PROBE__ = () => ({
+  ready: snapshot().ready,
+  errors,
+  calls: CALLS.map((c) => c[0]),
+  snap: snapshot(),
+});
+
+/* 额外演练：点开安装弹窗，确认它能渲染、能给出命令、复制按钮有反馈。
+ * 这是市场最重要的一条交互路径，必须在闸里跑到。 */
+function exerciseModal() {
+  const w = f.contentWindow;
+  const d = w.document;
+  const btn = d.querySelector('[data-act="install"]');
+  if (!btn) return { modal: 'no install button' };
+  btn.click();
+  const scrim = d.querySelector('.mkt-scrim');
+  if (!scrim) return { modal: 'click did not open modal' };
+  const cmdEl = scrim.querySelector('#cmd');
+  const steps = scrim.querySelectorAll('.mkt-step').length;
+  const footBtns = Array.from(scrim.querySelectorAll('[data-act2]')).map((b) => b.getAttribute('data-act2'));
+  return {
+    modal: 'open',
+    steps,
+    hasCmd: !!(cmdEl && cmdEl.textContent.includes('plugins')),
+    cmdHead: cmdEl ? cmdEl.textContent.slice(0, 110) : null,
+    discItems: scrim.querySelectorAll('.mkt-disc-item').length,
+    footBtns,
+    warnings: scrim.querySelectorAll('.mkt-note').length,
+  };
+}
+
+// ?modal=1：自动打开安装弹窗，供出图
+if (params.get('modal') === '1') {
+  setTimeout(() => { try { exerciseModal(); } catch (_) {} }, 2600);
+}
+
+/* 再演练：点一次「实时发现」（打 api.github.com）。
+ * 无网络 / 被限速 / 有结果 三种结局都算通过 —— 市场必须能优雅降级，
+ * 但不能出现未捕获异常。失败时应在页面上给出可见的说明条。 */
+async function exerciseLive() {
+  const w = f.contentWindow;
+  const d = w.document;
+  const btn = d.querySelector('[data-act="live"]');
+  if (!btn) return { live: 'no live button' };
+  btn.click();
+  await new Promise((r) => setTimeout(r, 3500));
+  const note = d.querySelector('.mkt-note');
+  return {
+    live: 'clicked',
+    noteText: note ? note.textContent.replace(/\s+/g, ' ').trim().slice(0, 110) : null,
+  };
+}
+
+setTimeout(async () => {
+  const s = snapshot();
+  let modal = null;
+  try { modal = exerciseModal(); } catch (e) { modal = { modal: 'threw: ' + e.message }; }
+  let live = null;
+  try { live = await exerciseLive(); } catch (e) { live = { live: 'threw: ' + e.message }; }
+
+  // 主题判定：mono 下类型徽标必须去饱和（宿主 mono 是整套灰阶）。
+  const w = f.contentWindow;
+  const bd = w.document.querySelector('.mkt-badge.type-skin');
+  const rgb = bd ? getComputedStyle(bd).color.match(/\d+/g).map(Number) : null;
+  const sat = rgb ? (Math.max(...rgb) - Math.min(...rgb)) / Math.max(...rgb) : null;
+  const themeOk = THEME === 'mono' ? (sat !== null && sat < 0.12) : true;
+
+  const ok = s.ready && s.cards > 0 && errors.length === 0
+    && modal && modal.modal === 'open' && themeOk && live && live.live === 'clicked';
+
+  diag.className = ok ? 'ok' : 'err';
+  diag.textContent = JSON.stringify({
+    ready: s.ready, cards: s.cards, errors, modal, live,
+    calls: [...new Set(CALLS.map(c => c[0]))], sources: s.sources, badges: s.badges,
+    installedBadges: s.installedBadges, filterLabels: s.filterLabels,
+    meta: (s.meta || '').replace(/\s+/g, ' ').trim(),
+    theme: s.theme, parentTheme: s.parentTheme, badgeColor: s.badgeColor,
+    badgeSat: sat === null ? null : Number(sat.toFixed(3)), themeOk,
+  }, null, 1);
+  document.title = ok ? 'PREVIEW_OK' : 'PREVIEW_FAIL';
+}, 3200);
+</script>
+</body>
+</html>
