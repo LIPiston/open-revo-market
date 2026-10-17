@@ -14,8 +14,9 @@
 另有一份 `%APPDATA%\OpenRevo\config.json` 保存宿主状态，皮肤开发会读/改到：
 
 ```json
-{ "active_skin": "skin-win11-dark",
-  "custom_plugin_toggles": { "eva01-core": false },
+{ "active_skin": null,              // 当前未启用任何皮肤
+  "active_background": null,        // 与 active_skin 正交的独立槽位
+  "custom_plugin_toggles": { "plugin-market": true },
   "wake_window_mode": "mini",
   "power_mode": 4, "refresh_rate": 300, "gpu_mode": "dgpu", "log_enabled": false }
 ```
@@ -24,9 +25,9 @@
 * 宿主在切换皮肤时会调 `resize_window` 并**重新居中**窗口，尺寸取 manifest 的 `window`。
 * **`window` 的宽高是 CSS 逻辑像素**（Tauri `LogicalSize`），不是物理像素。真机实测：manifest 写 `1120×800`、
   显示器 150% 缩放 → 窗口物理 `1702×1213`，客户端 CSS ≈ `1135×809`。
-* **宿主只在启动时枚举插件目录** → 0.8.7 装完必须重启宿主；**0.8.8 起插件页【刷新】可重扫列表**，
-  **`v0.8.8-dbfe615` 起【刷新】连当前样式一起热重载**（点一次刷新即可，不必拨开关）——见
-  `real-machine-verification.md` 第 2 节与 `plugin-dev-0.8.8-skill.md` §4。
+* **让宿主认到新目录**：插件页【刷新】= 重扫列表 **+ 热重载当前样式**（重放
+  `onApplySkin` / `onApplyBackground` → 重新 `load_plugin_*_css`）⇒ 改 `theme.css`、装新目录**都只需点一次【刷新】**。
+  ⚠️ 唯一例外：`active_skin` 指向**已删 ID** 时必须「停 → 改 → 启」（见 `real-machine-verification.md` 第 2 节）。
 
 ### manifest 的双键对冲
 
@@ -67,7 +68,8 @@ main                # python build_skins.py [--install] [--preview]
 * `src/base.css` 是**纯结构**文件：每个选择器都带 `__SKIN_ID__` 占位，构建时才落地成 `[data-skin="<id>"]`。
 * **新增一套变体只改 `VARIANTS`**，不要手写第二份 CSS。
 * `--install` 把 `<id>\{manifest.json,theme.css,assets\preview.png}` 拷进 `%APPDATA%\OpenRevo\plugins\<id>\`。
-* 校验安装是否最新：`<id>\theme.css` 与已装副本**逐字节比较**（本次四套 50,596 / 50,483 / 50,393 / 50,323 B）。
+* 校验安装是否最新：`<id>\theme.css` 与已装副本**逐字节比较**（0.8.8 时代四套为 50,596 / 50,483 / 50,393 / 50,323 B）。
+  ⚠️ 当前四套产物已从仓库与插件目录删除（见 `SKILL.md` §0.1），要校验先 `python build_skins.py --install`。
 
 ## 3. 令牌架构与 `--wf-hue-*` 镜像（必看）
 

@@ -546,4 +546,30 @@ python build_background.py set --image wall.jpg --targets skin-win11-dark   # �
 
 细节（含探针字段、已知坑、文件清单、退回原状）见 [`docs/reference/background-plugin.md`](docs/reference/background-plugin.md)。
 
-细节（含探针字段、已知坑、文件清单、退回原状）见 [`docs/reference/background-plugin.md`](docs/reference/background-plugin.md)。
+## 12. 插件市场 `plugin-market`（tab 插件）
+
+一套**在 OpenRevo 里自助浏览 / 获取插件的市场**：安装后主控制台多出一个【插件市场】选项卡。
+
+| 目录 | 作用 |
+|---|---|
+| `market\` | 源码：`src\market.js` + `src\market.css` + `src\index.template.html` + `catalog.json` |
+| `build_market.py` | 把三者合成**单文件** `plugin-market\index.html`，并做静态体检；`--install` 装机 |
+| `market\crawl_topic.py` | 爬 GitHub `topic:openrevo-plugin` → 生成 / 合并 `catalog.json` |
+| `market\validate_catalog.py` | 目录 10 条结构校验（E1–E10），CI 与本地共用 |
+| `.github\workflows\refresh-catalog.yml` | 每小时自动爬一次，有变更才提交 |
+| `plugin-market\` | 构建产物（已入库，`git clone` 后可 `--install` 即用） |
+
+**发现机制**：任何人的插件仓库只要打上 GitHub topic **`openrevo-plugin`**，就会被
+`crawl_topic.py` 收进目录；作者不必等爬虫，应用内还有「实时发现」直接搜 topic。
+
+**为什么不做「一键安装」**：0.9.1 宿主**没有任何安装类 IPC**（`install_plugin` / `write_file` /
+`create_dir` 全为 0 命中），也没有 fs / shell / dialog 插件；tab 插件的 iframe 沙箱
+（`allow-scripts allow-forms allow-same-origin`）**不含 `allow-downloads`、不含 `allow-popups`**，
+所以下载与 `window.open` 都被浏览器层挡死。市场因此给的是**可复制的 PowerShell `git clone` 命令**
++ 一键复制 + 打开插件目录 + 回【插件】页刷新，并在界面上**明说宿主没有安装接口**，不假装能一键装。
+取证见 [`docs/reference/market-host-constraints.md`](docs/reference/market-host-constraints.md)。
+
+```bash
+python build_market.py --install     # 构建并安装到 %APPDATA%\OpenRevo\plugins\plugin-market
+bash _tools\market-verify.sh cyber   # 等价宿主预览验收（含 mono 主题）
+```

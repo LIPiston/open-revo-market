@@ -3,6 +3,12 @@
 预览只能证明「样式表算出来是对的」，**版式、窗口几何、宿主实际注入时机**必须在真机上看。
 这一节是那次真机取证的全部方法、脚本与实测基线，照做即可复现。
 
+> **基线**：本页的几何 / 直方图 / MAE 数字测于 **0.8.8**，仅用于**回归对比**。
+> 当前宿主是 **0.9.1**（exe 9,368,576 B）—— 换版本后这些数字不作断言，必须重测。
+> ⚠️ 另一个已确认的硬边界：**无法在真实宿主里驱动 CDP 抓图**（`requireAdministrator` + 计划任务
+> `RunLevel=Highest`，且 9222 被用户 Chrome 占用）⇒ 本机验证上限 = 「等价沙盒 + 宿主目录枚举」，
+> 见 `market-host-constraints.md` §6。
+
 ## 1. 宿主是一个需要提权的 Tauri 应用
 
 * `open-revo.exe` 的 manifest 是 `requireAdministrator`：`taskkill /F /PID` 会**拒绝访问**。
@@ -19,29 +25,16 @@
 * P/Invoke 声明 `GetWindowTextW`/`GetClassNameW` 时**必须带 `CharSet = CharSet.Unicode`**，
   否则标题/类名只读到首字符（`_tools\wins.ps1:11-12` 已经带上这两行，新写脚本照抄）。
 
-## 2. 装完皮肤要「让宿主认到新目录」（最容易浪费时间的一个坑）
+## 2. 装完皮肤要「让宿主认到新目录」
 
-**0.8.7：宿主只在启动时枚举插件目录**，装完皮肤不重启，新皮肤在运行中的进程里根本不存在——
-此时你会看到「皮肤没生效」，但其实是「进程比插件文件还老」。
+**插件页【刷新】= 重扫列表 + 热重载当前样式**：它重新调 `get_custom_plugins`，并重放
+`onApplySkin` / `onApplyBackground` → 重新 `load_plugin_*_css`（0.9.1 逐字：
+`M=async(j=!1)=>{…get_custom_plugins…if(j){…get_active_skin / get_active_background…重放…}}`）
+⇒ **改 `theme.css`、装新插件目录都只需点一次【刷新】**，不必拨开关、不必重启。
 
-> **0.8.8 已改**：插件页右上角【刷新】会重新调 `get_custom_plugins` 重扫插件目录，新装的目录
-> 不用重启就能出现在列表里。**`v0.8.8-dbfe615` 起【刷新】还会热重载当前样式**（handler 收「是否
-> 热重载」参数，逐字 `onClick:()=>j(!0)`、title `"刷新已安装插件列表并热重载当前样式"`，重扫后重跑
-> `onApplySkin`/`onApplyBackground`）⇒ **改 `theme.css`、装新插件都只需点一次【刷新】**。
-> ⚠️ 早于该构建（含 0.8.7、`v0.8.8-bf72755`）的【刷新】**只重扫列表**，那时改已有 CSS 需关/开开关。
-> 另外 `active_skin` 指向**已删 ID** 的残局仍必须停机改配置 + 重启（见本节末尾）。
-
-诊断：比较进程启动时间与插件目录 mtime
-
-```powershell
-_tools\when.ps1      # 打印 open-revo 进程的 StartTime
-```
-
-修复：提权 `_tools\kill-and-start.ps1` 重启（**`v0.8.8-dbfe615` 及之后只需要点一次【刷新】**，它会重扫列表并热重载当前样式）。
-
-**特例：`active_skin` 指向的皮肤 ID 已经被删掉**（改名 / 换 ID 后的常见残局）。这时光重启不够——
-宿主只在启动时读一次 `config.json`，而且**运行中会周期性整份回写**它（实测两次：`10:13:06`、`11:26:44`，
-期间无人触碰），所以「先改再启」必被冲掉。顺序只能是 **停 → 改 → 启**，已封成一条命令：
+`active_skin` / `active_background` 指向**已删 ID**（改名 / 换 ID 后的残局）是唯一例外：光刷新不够。
+宿主启动时读一次 `config.json`，且运行中持有权威内存态、**会整份回写**它，所以「先改再启」必被冲掉。
+顺序只能是 **停 → 改 → 启**，已封成一条命令：
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File _tools\set-active-skin.ps1 skin-win11-dark dry   # 空跑看计划
@@ -50,6 +43,17 @@ powershell -NoProfile -ExecutionPolicy Bypass -File _tools\set-active-skin.ps1 s
 
 脚本自带守卫（宿主没停掉就拒绝改、目标皮肤无 `theme.css` 就拒绝改），只替换 `active_skin` 一个字段，
 改完 `ConvertFrom-Json` 回读复验。细节见 pitfalls #37。
+
+> 当前四套皮肤产物已删（见 `SKILL.md` §0.1），所以 `set-active-skin.ps1 <skin>` 现在会因「目标皮肤无
+> `theme.css`」被守卫拒绝 —— 先用 `python build_skins.py` 重建。
+
+诊断：比较进程启动时间与插件目录 mtime
+
+```powershell
+_tools\when.ps1      # 打印 open-revo 进程的 StartTime
+```
+
+修复：提权 `_tools\kill-and-start.ps1` 重启（一般**只需要点一次【刷新】**）。
 
 ### 2.1 宿主会自我更新并重启（每次动手前先复核）
 
@@ -128,11 +132,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File _tools\set-active-skin.ps1 s
 1. `config.json` 里临时改过的字段**还原**（本次是 `wake_window_mode` → `"mini"`，备份 `config.json.bak-skinverify`）。
 2. 提权重启宿主一次（`kill-and-start.ps1`），确认 mini 窗口回到隐藏待唤醒状态
    （本次：`hwnd=10684400`、`615×916`、`vis=False`）。
-3. 确认 `active_skin` 仍是**用户自己选的那套**（本次 `skin-win11-dark`），不要替用户改选择。
+3. 确认 `active_skin` / `active_background` 仍是**用户自己选的那套**，不要替用户改选择
+   （当前实测两者均为 `null` —— 皮肤与背景都没装）。
 4. 删掉中间废图与临时 Chrome profile（`_shots/mg-*.png`、`mv-*.png`、`real-dash2.png`、`_shots/prof-*`）。
 5. 若曾设置过 `HKCU\…\WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS`（CDP 调试题），**删掉**——
    该环境变量在 Tauri/wry 下是被忽略的死路，留着只会误导下一次排查。
-6. 校验安装产物：`<id>\theme.css` 与已装副本逐字节一致。
+6. 校验安装产物：`<id>\theme.css` 与已装副本逐字节一致（前提是皮肤产物还在；当前已删，见 `SKILL.md` §0.1）。
 7. **把抓图时唤醒的大面板收起**（`wake-grab-dash.ps1` 不还原停车位置，见 §9 末条）——
    否则它会一直留在桌面上。
 

@@ -578,3 +578,91 @@ j = async (S = !1) => { b(!0); try { const D = await m("get_custom_plugins") || 
   一次 `brotli.decompress(data[start:next])` 成功；靠遍历 `err_at` 暴扫（4 KiB / 8 KiB 分块）
   一律 `decoder unhealthy`。
 
+
+---
+
+## 16. 皮肤产物清理 + 市场目录收敛 + 缺失接口清单（2026-10-17 第七轮）
+
+用户口径两件事：**「清理掉当前已有的几个皮肤」** 与 **「读取插件市场代码，把缺失接口整理成文档放到桌面」**。
+
+### 16.1 先纠正一个前提：宿主里其实一套皮肤都没装
+
+动手前先实地核对，结论与仓库 README 当时写的相反：
+
+* `%APPDATA%\OpenRevo\plugins\` 里**只有 `plugin-market`**；全盘 `find /c /d -maxdepth 8 -name "skin-win*"`
+  只命中**仓库内**那四个目录，别处没有。
+* 但 `config.json` 里**留着四套皮肤 + `eva01-core` 的 `custom_plugin_toggles`**，以及
+  `widget_positions: {"eva01-core": [1575,617]}` —— 是**历史安装的残留**。
+* README 开头「已经装好了。四套皮肤已安装到 …」是**过时描述**。
+
+⇒ 所以「清理皮肤」的实质 = **删仓库里的四个产物目录 + 清宿主 config 残留**，不是「卸载已装插件」。
+
+### 16.2 执行（按用户选定范围：删目录 + 清 config，保留工具链）
+
+* 删除 `skin-win10-dark\`、`skin-win10-light\`、`skin-win11-dark\`、`skin-win11-light\`（12 个文件）。
+* `config.json`：`custom_plugin_toggles` 从 6 项收敛为 `{"plugin-market": true}`；`widget_positions` 清空。
+  备份 `config.json.bak-skincleanup-20261017-075507`。改后 JSON 合法，`active_skin` / `active_background` 均为 `null`。
+* **保留工具链**（`build_skins.py` + `src/base.css` + `preview*.html`）：`build_background.py` 与
+  `bg_common.py` 都 `import build_skins`（用 `skins.VARIANTS` / `PLUGINS_DIR` / `manifest` / `make_preview`），
+  删了会连带弄坏 `bg-custom`。
+
+**副作用（已记入 `pitfalls.md` #42）**：`_tools/audit.sh` / `verify.sh` 按 `<id>/theme.css` 逐变体取样式
+（`audit.sh` 默认四套 ID，`preview.html` 同步 XHR 读 `<id>/theme.css`）。目录删掉后实测
+`_audit/skin-win11-dark.audit.txt` 里 `rules_applied = none` —— **皮肤根本没被注入**。
+要跑 132 条验收必须先 `python build_skins.py` 重建。这是**输入缺失**，不是样式坏了。
+
+### 16.3 市场目录收敛（不改的话会给出坏命令）
+
+四个皮肤目录一删，市场里那 4 条目录项就指向**不存在的子目录**，用户照抄 `git clone` 命令必然失败。
+逐处收敛：
+
+| 位置 | 改动 |
+|---|---|
+| `market/catalog.json` | 6 条 → **2 条**（`bg-custom`、`plugin-market`），`count` 同步 |
+| `market/src/market.js` 的 `SEED` | 内置兜底同样收敛为 2 条（并注明构建时会用 catalog.json 整块替换它） |
+| `market/crawl_topic.py` 的 `CURATED` | 去掉 4 个皮肤 key（留下 `bg-custom`、`plugin-market`） |
+| `_tools/market-preview.html` | 模拟宿主返回的已装列表收敛为 2 条 |
+
+验收（全绿）：`build_market.py --check` 自检通过；`validate_catalog.py` 通过 2 条；
+`market-verify.sh cyber` **PASS**（cards=2 / badges=8 / installed=2 / 0 JS 错误 / 弹窗 4 步）；
+`market-verify.sh mono` **PASS**（badge sat=0.098）；`--install` 后与仓库产物 `cmp` 逐字节一致；
+产物里 `skin-win` / `eva01` 命中 **0**。
+
+### 16.4 宿主缺失接口清单（桌面交付）
+
+新增桌面文档《OpenRevo 插件市场-宿主缺失接口清单.md》。取证方式与前几轮一致（抽 exe 明文 + 抽 0.9.1 前端 JS）：
+
+* **市场真正用到的宿主 IPC 只有 2 个**：`get_custom_plugins`（只读已装列表）、`open_plugins_dir`（开目录，不写盘）。
+  目录靠 `fetch` 拉 GitHub，实时发现靠 `fetch` 打 GitHub API —— 除此之外不碰宿主。
+* 宿主全部 IPC 共 **132 个唯一命令**（`x("…")` 抽取），**与插件相关的只有 13 条**。
+* **0 命中**（exe 与 JS 双查）：`install_plugin` / `uninstall_plugin` / `remove_plugin` / `reload_plugin` /
+  `write_file` / `write_text_file` / `read_text_file` / `create_dir` / `fs::write` / `plugin:fs` /
+  `plugin:dialog` / `plugin:shell` / `open_url` / `clipboard`。
+* Tauri 侧只挂 `tauri-plugin-autostart-2.5.1` 与 `tauri-plugin-single-instance-2.4.4`；
+  capability 清单只有 `core:path|event|window|webview|app|image|resources|menu|tray:default`。
+* 文档按优先级给出 8 条建议接口（P0 = 安装/卸载/重载三件套；P1 = 能力位查询、开外链；
+  P2 = 读 manifest、写剪贴板），每条都带建议签名与安全底线（路径由宿主拼、协议白名单、可选 sha256 校验）。
+
+### 16.5 本轮顺带复核：宿主 config 回写不是「周期性」
+
+前几轮记为「宿主运行中**周期性**整份回写 config」（10:13:06 / 11:26:44 / 12:06:33）。本轮实测
+**静置 30 s 字节完全不变**，窗口内唯一的字节变化（`plugin-market: false → true`）来自一次**真实的插件开关点击**。
+⇒ 修正为「**由用户操作触发**的回写」，写进 `environment-and-tools.md`。这降低了「改了就被冲掉」的恐慌，
+但**停机改**仍是最稳口径（`set-active-skin.ps1` 的守卫不变）。
+
+### 16.6 技能包同步
+
+* `docs/SKILL.md` **重写**为 0.9.1 基线：五形态枚举、13 条插件命令、三种 sandbox、市场链路与验收判据、
+  皮肤产物现状（含「verify.sh 要先重建」这条推论）。
+* `docs/README.md`：文件地图、基线说明、维护约定（新增市场链与 BOM/同步条目）。
+* `reference/environment-and-tools.md`：环境硬事实换 0.9.1、工具地图加市场链、证据索引换 `_extracted/v091/`、
+  回退清单写入本轮已执行的清理、未做事补「真机 CDP 不可能」「widget/slot 未实测」。
+* `reference/pitfalls.md`：新增 #40（市场为何不能一键装）、#41（改 src 不重构建无效）、
+  #42（删皮肤目录导致 `rules_applied = none`）、#43（能力三态，别把「未扫描」写成「未检出」）。
+* `reference/skin-authoring.md`、`real-machine-verification.md`：去掉「宿主只在启动时枚举」的旧口径，
+  改为「【刷新】= 重扫 + 热重载，唯一例外是 `active_skin` 指向已删 ID」。
+* `reference/plugin-manual-digest.md`、`host-truth-extraction.md`：标注「本页基线 0.8.8，最新以 0.9.1 为准」。
+* **DSH 浓缩技能已随之删除**：`C:\Users\LIPis\.dsh\skills\openrevo-skin-plugin\SKILL.md` 本轮先按 0.9.1
+  基线重写过（修掉「宿主**没有**全局 `*{box-sizing}`」「装完**必须**重启」两条与发行版相反的旧结论），
+  但用户随后卸载了 DSH，该副本与 `docs/README.md` 里指向它的两处同步约定一并移除 ——
+  现在唯一的技能入口是本仓库的 `docs\SKILL.md`。

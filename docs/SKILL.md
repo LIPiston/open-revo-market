@@ -1,200 +1,238 @@
 ---
 name: openrevo-skin-plugin
-description: 为 OpenRevo（open-revo.exe）开发、修改、验证 Windows 组件 UI 皮肤插件（skin plugin）。当任务涉及 OpenRevo 皮肤 / theme.css / manifest.json 的 skin 类型 / 把宿主改成 WinUI、Fluent、原生 Windows 观感 / 宿主主控台与迷你双面板的样式与不透明化 / 从 exe 里抽宿主真值 CSS / 真机截图与预览逐像素比对时，使用本技能。
+description: 为 OpenRevo（open-revo.exe）开发、修改、验证第三方插件（skin 皮肤 / background 背景 / tab 面板 / widget 挂件 / slot 微插槽）与插件市场。当任务涉及 OpenRevo 的 theme.css、manifest.json、plugin_type 形态、把宿主改成 WinUI/Fluent 观感、宿主主控台与迷你双面板样式、从 exe 抽宿主真值 CSS/JS、无头 Chrome 审计与 verify.sh 验收、真机提权抓图与像素度量、或插件市场的目录/catalog/安装链路时，使用本技能。
 ---
 
-# OpenRevo 皮肤插件开发技能
+# OpenRevo 插件开发技能（皮肤工具链 + 插件市场）
 
-本技能沉淀自一次完整的实战：从零做出**四套 WinUI/Fluent 皮肤**（`skin-win11-light` / `skin-win11-dark` /
-`skin-win10-light` / `skin-win10-dark`），把宿主主控台重排成 **WinUI3 左侧导航栏 + 完全不透明**，
-并让**迷你面板**同步改造，最后在真机上完成像素级取证。
+本技能沉淀自两轮完整实战：
 
-* 项目根目录（下文相对路径都基于它）：`D:\LIPis\Documents\code\openrevo-plugins\`
-  （harness 工作区 `D:\LIPis\Documents\deepseek-harness\default-workspace\openrevo-win-skin\` 是**改名前的过期镜像**，别拿它当盘）
-* 规范来源：`docs\OpenRevo_第三方插件开发手册.md`（v1.0，**用例 7 = 皮肤插件**，见其 L659 附近）；
-  已消化成 `reference\plugin-manual-digest.md`（含「手册 ≠ 发行版」对照表），日常查那份就够
-* 版式参照物（只读原型）：`D:\LIPis\desktop\openrevo ui`
-* 宿主：`D:\Program Files\OpenRevo\open-revo.exe`（**唯一真值来源**，版本随发行变动）
-* 产物安装位：`%APPDATA%\OpenRevo\plugins\<skin_id>\`；宿主配置：`%APPDATA%\OpenRevo\config.json`
+* **皮肤工具链**：做出四套 WinUI/Fluent 皮肤，把宿主主控台重排成 **WinUI3 左侧导航栏 + 完全不透明**，
+  迷你面板同步改造，并在真机完成像素级取证。**四套皮肤产物现已从仓库与宿主移除，工具链保留**（见 §0.1）。
+* **插件市场**：`plugin-market`（`tab` 形态）—— 浏览、能力披露、给出最短安装路径。**这是本仓库当前的主交付物。**
 
-## 30 秒上手
+## 0. 位置与当前状态
+
+| 项 | 值 |
+|---|---|
+| 权威树（只维护这一棵） | `D:\LIPis\Documents\code\openrevo-plugins\` |
+| 宿主 exe（**唯一真值来源**） | `D:\Program Files\OpenRevo\open-revo.exe` |
+| 宿主版本 | **0.9.1**（9,368,576 B，mtime 2026-10-16 20:29） |
+| 插件安装位 | `%APPDATA%\OpenRevo\plugins\<plugin_id>\` |
+| 宿主配置 | `%APPDATA%\OpenRevo\config.json` |
+| 当前已装插件 | **只有 `plugin-market`**（皮肤未装） |
+| 已失效镜像 | `…\deepseek-harness\default-workspace\openrevo-win-skin\`（2026-10-04 改名前的快照，**已作废**，不要审计/同步） |
+
+> ⚠️ **基线是 0.9.1，不是 0.8.8。** 宿主会自我更新（0.8.8 → 0.9.1 就发生在两次工作之间）。
+> 写任何断言前先比 **exe 体积 + mtime**，并用**资产文件名里的内容哈希**（`index-<hash>.js`）判断前端有没有变：
+> **文件名里的哈希就是内容哈希**，文件名没变才能复用 `_extracted/v091/` 里的抽取物。
+
+### 0.1 皮肤产物的现状（重要）
+
+四套皮肤目录 `skin-win11-{light,dark}\` / `skin-win10-{light,dark}\` **已从仓库删除**，
+宿主 `config.json` 里的残留开关（含 `eva01-core`）也一并清掉。**但构建工具链完整保留**：
 
 ```bash
-cd <项目根目录>
-python build_skins.py --install      # 生成 + 安装四套皮肤到 %APPDATA%\OpenRevo\plugins\
-bash _tools/verify.sh                # 验收总闸：重跑两页审计 + 逐条断言（132 条），全绿才算过
-bash _tools/audit.sh                 # 无头 Chrome 跑四套变体的 computedStyle 审计 → _audit\<id>.audit.txt
-# 让宿主认到新插件目录：0.8.7 必须重启（只在启动时枚举）；0.8.8 起点一次【刷新】即可
-# （v0.8.8-dbfe615 起【刷新】连样式一起热重载）。判构建看徽标 PRO v0.8.8-<hash>。重启走提权脚本：
-powershell -NoProfile -Command "Start-Process powershell -Verb RunAs -WindowStyle Hidden -Wait -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','<项目根目录>\_tools\kill-and-start.ps1'"
+python build_skins.py            # 重新生成四个 skin-<id>\ 子目录
+python build_skins.py --install  # 生成并安装到 %APPDATA%\OpenRevo\plugins\
 ```
 
-看效果：双击 `preview.html`（主窗）、`preview-mini.html`（迷你面板），顶部按钮即时切换四套皮肤。
+保留工具链的原因是**硬依赖**：背景插件那套代码 `import build_skins`
+（`build_background.py` 用 `skins.VARIANTS` / `skins.PLUGINS_DIR` / `skins.make_preview`，
+`bg_common.py` 用 `build_skins.manifest` / `build_theme_css`）。删掉工具链会连带弄坏 `bg-custom`。
 
-## 官方手册消化件（v1.0 / 783 行 → `reference/plugin-manual-digest.md`）
+> **推论：`_tools/audit.sh` 与 `_tools/verify.sh` 现在需要先重建皮肤才能跑。**
+> 它们按 `<skin_id>/theme.css` 逐个变体取样式（`audit.sh` 默认四套 ID，`preview.html` 用同步 XHR 读
+> `<id>/theme.css`），仓库里没有这些目录时审计会报 `rules_applied = none`（皮肤根本没注入）。
+> 想跑 132 条验收：先 `python build_skins.py`，再 `bash _tools/verify.sh`。
 
-皮肤只是 OpenRevo 插件生态里的一个形态，改造宿主前先知道这套规矩：
+## 1. 插件生态：五种形态（0.9.1 实测枚举）
 
-| 项 | 事实 |
-|---|---|
-| 项目定位 | 笔记本硬件**微内核**：Rust Ring0/ACPI/EC 钥匙库（Vault）+ Tauri 2 IPC + HAL **语义化**能力网关。官方 React 主控台只是默认客户端，一切皆插件 |
-| 插件根 | `%APPDATA%\OpenRevo\plugins\<plugin_id>\`（目录名 = `manifest.json` 的 `id`） |
-| 插件六形态 | `skin` 0MB（注入 `theme.css` + 挂 `data-skin`）/ `tab` 主窗沙盒 iframe <5MB / `widget` 独立 Edge WebView2 15–25MB / `service` Rust Rhai 无头 <100KB / `shell` 独立全尺寸 ~35MB / `driver` 原生 `.dll`（只在手册矩阵里，不在字段枚举里） |
-| 清单权威键 | `id`/`name`/`version`/**`plugin_type`**（手册示例写 `"type"` 是旧写法）+ `theme_css`（skin 必填）/`entry`/`window`/`telemetry`/`permissions` |
-| 8 大硬件 IPC | `set_fan_boost`、`set_power_mode{1 办公\|2 均衡\|3 狂暴\|4 自定义}`、`set_battery_limit{60..100}`、`switch_refresh_rate`、`set_gpu_mode{discrete\|hybrid}`、`apply_four_zone_colors`、`set_water_cooler_speed`、`set_device_switch{camera\|mic\|touchpad\|winlock}`；入口 `import { invoke } from '@tauri-apps/api/core'`，**未在 `permissions` 声明会被安全网关拦** |
-| 安全军规 | 禁裸 EC 寄存器写入（只给语义化指令）；功耗墙/电池限额由固件钳位；主线程禁阻塞，网络与大模型必须异步流式 |
-| 遥测铁律 | 不声明 `gpu_*`，内核**绝不**调 NVAPI（独显保 D3Cold 0W）；纯陪伴挂件用 `"telemetry":{"enabled":false}` 让遥测深睡；前端 `listen('hardware-state-updated')` |
-| 排障 | Safe Mode 二分法：编辑 `config.json` 的 `custom_plugin_toggles` 把嫌疑 ID 置 `false` 再重启（本项目实测该键存在） |
+前端 JS 里实际出现的 `plugin_type` 字面量（`grep 'plugin_type==="…"'` 计数）：
 
-**手册 ≠ 发行版**（7 条对照表在 `reference/plugin-manual-digest.md` §10；最要紧的三条）：手册 §7 示例的
-`.overview-main-grid` / `.sensor-gauge-cluster` / `.cooling-fan-card` / `.power-mode-selector` 在发行版里**不存在**；
-手册的 `--core-*` 令牌也不存在，但 `--surface-*` / `--status-*` / `--radius-*` **就是宿主真值**
-（`--wf-*` 是本工具链私有前缀，不是宿主令牌，见 `reference/plugin-dev-0.8.8-skill.md` §5.2）；
-手册说「插件页点刷新即热加载」——**`v0.8.8-dbfe615` 起完全成立**：【刷新】= 重扫列表 **+ 热重载当前样式**
-（重放 `onApplySkin`/`onApplyBackground` → 重新 `load_plugin_*_css`），点一次刷新即可，不必拨开关、不必重启；
-0.8.8 的 CSS 本身也是按需注入（`useCallback` 内）。⚠️ 早于该构建（含 0.8.7、`v0.8.8-bf72755`）的【刷新】只重扫列表。
-**0.8.8 新增背景壁纸通道 `active_background`**
-（`<style id="openrevo-custom-background">`），与皮肤槽位正交可共存 —— 见 `reference/plugin-dev-0.8.8-skill.md`。
-注意判断宿主是否更新**要看构建号**（徽标 `PRO v0.8.8-xxxxxxx`），`VersionInfo` 在同版本内多次构建间不变。
+| 字面量 | 次数 | 说明 | 注入点 |
+|---|---|---|---|
+| `skin` | 4 | 主窗皮肤 | `<style id="openrevo-theme-skin">`（读旧 id `openrevo-custom-skin` 会就地改名） |
+| `background` | 4 | 背景壁纸 | `<style id="openrevo-custom-background">` |
+| `tab` | 2 | **面板插槽**（市场就是它），主体是沙盒 iframe | 顶栏胶囊 → 插件页签 |
+| `widget` | 2 | 桌面挂件，独立 WebView2 窗口 | 独立窗口 |
+| `slot` | 2 | **微插槽**，按 `target_slot` 填进宿主既有页面的占位 | `slot_height` 缺省 `54px` |
 
-## 动手前必读的硬约束
+* `service` / `shell` / `driver` **在 0.9.1 前端里仍无字面量** —— 只在官方手册矩阵里出现，
+  是否真存在**未证实**，不要依据手册对外承诺。
+* manifest 字段表（exe @7401431，Rust 侧字段名表）：`… telemetry entry target_slot slot_height theme_css background_css …`。
+  `target_slot` / `slot_height` / `dir_name` 是 0.9.1 新增。**`permissions` 字段不存在**（exe / JS 全 0 命中）。
+* 一个 `slot` 插件生效需三条件同时成立：类型是 `slot`、`target_slot` 命中宿主某个具名槽、且 `enabled`。
+  已知槽名：`power.hardware_limit`。
 
-1. **宿主是唯一真值**：手册 §7 示例里的 `.overview-main-grid` / `.sensor-gauge-cluster` / `.cooling-fan-card` /
-   `.power-mode-selector` 在发行版里**根本不存在**（在 WebView2 V8 代码缓存里逐字检索命中数为 0）。
-   以 `_extracted\index-*.css` 的真实选择器为准，手册示例名只能当前向兼容层。详见 `reference/host-truth-extraction.md`。
-2. **`theme.css` 必须是单文件**：宿主把整份 CSS 文本注入 `<style id="openrevo-custom-skin">`，
-   `@import` 会按宿主文档 base URL（`tauri://`）解析，取不到插件目录里的相对文件。
-3. **命名空间只能用 `[data-skin="<id>"]`**（手册 §7 硬性要求，皮肤互斥）。
-   **绝不要**写 `body:not([data-skin])` 之类兜底手臂，那会误命中别的皮肤。
-   挂到 `body` 上的浮层用 `body[data-skin="<id>"] …` 与 `body:has([data-skin="<id>"]) …` 两个手臂覆盖；
-   `data-skin` 从来不写在 `<html>` 上。
-4. **宿主大量使用 React 内联 `style={{…}}`**（`.acrylic-container` 的 `display:flex`、迷你根的
-   `background:rgba(12,15,22,.96)`/`backdrop-filter:blur(28px)`/`width:100vw`…）→ 想压过它**只能**用 author `!important`。
+### 1.1 三种 iframe 的 sandbox 各不相同
+
+| 形态 | sandbox | 后果 |
+|---|---|---|
+| `tab` | `allow-scripts allow-forms allow-same-origin` | **无 `allow-downloads` / `allow-popups`** ⇒ 下载与 `window.open` 被浏览器层拦死 |
+| `widget` | 上者 + `allow-modals` | 多模态对话框 |
+| `slot` | **无 sandbox** | 与宿主同源无隔离 |
+
+> `tab` 同时给 `allow-same-origin` + `allow-scripts` ⇒ **沙盒形同虚设**：iframe 与宿主同源，
+> 既能读 `window.parent.document`，也能拿 `window.parent.__TAURI_INTERNALS__.invoke`。
+> **绝不**把「跑在 iframe 里」当安全边界，也不要在 UI 上写「安全隔离」。
+
+### 1.2 宿主**有**的插件命令（13 条，全部）
+
+```
+get_custom_plugins          load_plugin_html            load_plugin_theme_css
+load_plugin_background_css  set_custom_plugin_enabled   open_plugins_dir
+open_custom_widget          close_custom_widget         widget_ready
+set_active_skin             get_active_skin             set_active_background
+get_active_background
+```
+
+宿主全部 IPC 共 **132 个唯一命令**（从 0.9.1 前端 `x("…")` 抽取）。**与插件相关的只有上表这 13 条**，
+没有一条能：下载 / 写盘 / 删除插件 / 重载目录 / 开外链 / 读任意文件 / 读宿主版本。
+缺失接口的完整清单与建议签名见 `market-host-constraints.md` §3 与桌面文档《OpenRevo 插件市场-宿主缺失接口清单》。
+
+---
+
+## 2. 硬约束（踩过学费的）
+
+1. **宿主是唯一真值**：手册示例类名（`.overview-main-grid` / `.sensor-gauge-cluster` / `.cooling-fan-card` /
+   `.power-mode-selector`）在发行版里**不存在**；手册的 `--core-*` 令牌也不存在。以 `_extracted/v091/` 的真实选择器为准。
+2. **CSS/HTML 必须单文件**（对 skin 与 tab 都成立）：
+   * `skin`：宿主把整份 CSS 注入 `<style>`，`@import` 按 `tauri://` base URL 解析 → 取不到插件目录里的相对文件。
+   * `tab`：宿主用 **`srcDoc`** 注入 iframe，基准 URL 是**宿主文档**（`tauri://localhost`）→
+     任何 `<link rel=stylesheet>` / `<script src>` / `<img src="assets/…">` / `@import` **都 404**。
+     所以市场产物是单文件（CSS/JS 全内联），构建期断言零外部引用。
+3. **皮肤命名空间只能用 `[data-skin="<id>"]`**（皮肤互斥）。**绝不**写 `body:not([data-skin])` 之类兜底。
+   `data-skin` 从来不写在 `<html>` 上（宿主写的是 `data-skin` / `data-background` / `data-theme` / `data-window-mode`）。
+4. **压过宿主 React 内联 `style={{…}}` 只能靠 author `!important`**
+   （`.acrylic-container` 的 `display:flex`、迷你根的 `background:rgba(12,15,22,.96)` / `backdrop-filter` 等）。
 5. **CSS 自定义属性的层叠陷阱**：元素上的局部声明**胜过**继承值。宿主在 `.mini-drawer-root` 与
    `[data-theme=mono|cyber] .mini-drawer-root` 上**重新声明**整套 `--theme-*`，所以皮肤必须在
-   `[data-skin="<id>"] .mini-drawer-root[data-theme]`（0,3,0）这一层再声明一遍，并读**镜像变量** `--wf-hue-*`。
-   六个槽位名 `pwr/gpu/hz/lux/kbd/bat` **一个都不能删**（宿主 mini 内联样式按名字取值），只能改它们的**取值**。
-6. **宿主有全局重置** `*{box-sizing:border-box;margin:0;padding:0;user-select:none}`（0.8.7/0.8.8 都在，紧跟 `:root`）
-   → 不用自己再声明；**永远不要**给 `.mini-drawer-root` 加 `border`（理由不是 box-sizing，而是它纵向余量只剩 11px，描边请用 `box-shadow: inset`）。
-7. **宿主认新插件目录的时机**：0.8.7 只在启动时枚举一次（装完不重启，旧进程里根本没有新皮肤，先比
-   `_tools\when.ps1` 的进程启动时间与插件目录 mtime）；**0.8.8 起插件页【刷新】可重扫列表**，
-   **`v0.8.8-dbfe615` 起【刷新】还会热重载当前样式**（点一次即可，不必拨开关）。宿主进程是
-   `requireAdministrator`，`taskkill` 会被拒
-   → 用提权 `_tools\kill-and-start.ps1`。
-   若 `active_skin` 指向的是**已被删掉的旧 ID**（换 ID / 改名的常见残局），光重启不够——宿主只在启动时读一次，
-   而且**运行中会周期性整份回写 config**，所以顺序必须「停 → 改 → 启」，用 `_tools\set-active-skin.ps1`（见 pitfalls #37）。
-8. **本机模型不支持图片输入**（`read_image` 报 `does not declare image input`）：所有观感判读只能靠
-   直方图 / 列行亮度签名 / 分块 MAE / ASCII 渲染。见 `reference/real-machine-verification.md`。
-9. **判读真机截图前先确认 z 序与遮挡**：`WindowFromPoint` 会**跳过** Tauri 的透明/分层窗口（回报的是下面的窗口），
-   不能当 z 序证据；抓面板前必须**置顶**（提权脚本），否则拍到的是你自己浏览器。见 pitfalls 第 8/10 条。
-10. **改完要能回到用户原状**：动过 `config.json` 的字段（例如为展开大面板临时改 `wake_window_mode`）必须还原，
-    并留备份（`config.json.bak-*`）。
-11. **宿主会自我更新并重启**：开发中途实测发生过一次（exe 于 `23:49:31` 被换成 8,496,640 B，进程 `23:54:17` 自动重启），
-    所有**字节偏移/文件大小**类断言当场作废。动手前先比 exe 的 mtime/大小与进程启动时间；
-    用**资产文件名里的内容哈希**（`index-<hash>.css`）判断宿主 CSS 有没有变——本次哈希没变、抽出来与旧构建逐字节相同，
-    所以皮肤不受影响。详见 `real-machine-verification.md` §2.1。
+   `[data-skin="<id>"] .mini-drawer-root[data-theme]`（0,3,0）这一层再声明，并读**镜像变量** `--wf-hue-*`。
+   六个槽位名 `pwr/gpu/hz/lux/kbd/bat` **一个都不能删**（宿主 mini 内联样式按名字取值），只能改取值。
+6. **配色是硬约束**（用户口径）：整份 UI 只有 `--wf-accent`（系统主题色：可交互/已选中/已启用）
+   + `--wf-important`（重要强调色：性能/功率/需注意）两个装饰色；`--wf-ok/-warn/-error` 只表达真实状态。
+   验收要求 `dom.hueFamilies = 2` 且 `census.py` 色族数 = 2。⚠️ `--wf-*` 是**本工具链私有前缀**，不是宿主令牌。
+7. **宿主有全局重置** `*{box-sizing:border-box;margin:0;padding:0;user-select:none}`（紧跟 `:root`）→ 不用自己声明；
+   **永远不要**给 `.mini-drawer-root` 加 `border`（纵向余量只剩 11px，描边用 `box-shadow: inset`）。
+8. **宿主认新插件目录的时机**：0.9.1 起插件页【刷新】**重扫列表 + 热重载当前样式**（重放
+   `onApplySkin` / `onApplyBackground` → 重新 `load_plugin_*_css`），所以改 `theme.css`、装新目录
+   **都只需点一次【刷新】**，不必拨开关、不必重启。
+   ⚠️ 唯一例外：`active_skin` / `active_background` 指向**已删的旧 ID** 时，光刷新不够，必须
+   「停 → 改 → 启」（`_tools\set-active-skin.ps1`）。宿主进程是 `requireAdministrator`，`taskkill` 会被拒。
+9. **本机模型不支持图片输入**（`read_image` 报 `does not declare image input`）：一切观感判读只能靠
+   直方图 / 列行亮度签名 / 分块 MAE / ASCII 渲染（`census.py` / `cmp.py` / `prof.py` / `ascii.py`）。
+10. **抓真机图必须先置顶**：`WindowFromPoint` 会**跳过** Tauri 的透明/分层窗口，不能当 z 序证据；
+    抓图脚本必须提权（`SetWindowPos` 也被 UIPI 拦）。抓完记得还原。
+11. **改完要能回到用户原状**：动过 `config.json` 必须备份（`config.json.bak-*`）并还原。
+    ⚠️ 宿主运行中持有权威内存态，**会整份回写 config**（实测多次）—— 但该回写**由用户操作触发**，
+    静置不会自己变（实测静置 30 s 字节不变）。保险起见：停机改，或改完立即回读复验。
+12. **`.ps1` 必须 UTF-8 BOM**（含中文时），且写文件的工具会**静默吃掉 BOM** →
+    改完 `head -c3 x.ps1 | od -An -tx1` 应为 `ef bb bf`，再跑 `[Parser]::ParseFile` 复核 0 error。
 
-## 配色纪律：只有两个强调色（硬约束）
+---
 
-用户口径（m00001 / m00053）：**「mini 模式只使用系统主题色进行强调」→「不要这么多颜色进行装饰，
-一个系统主题色加一个重要强调色就行」**。
+## 3. 插件市场（本仓库主交付物）
 
-| 令牌 | 角色 | 适用范围 |
-|---|---|---|
-| `--wf-accent` + 派生 | **系统主题色** | 一切可交互 / 已选中 / 已启用：导航、tab 胶囊、按钮、开关、焦点环、滑块、指标卡（性能模式除外） |
-| `--wf-important` + 派生 | **重要强调色**（暖橙 `--wf-hue-pwr`） | 只用于性能 / 功率 / 需要注意：性能模式卡、`active-beast` 狂暴档、功率徽标、休眠守卫、OEM 运行中 |
-| `--wf-ok` / `-warn` / `-error` | 状态语义色 | 只表达真实状态（设备开/关、告警），**不得当装饰** |
+| 目录 / 文件 | 作用 |
+|---|---|
+| `market/src/{market.js,market.css,index.template.html}` | 源码（**只改这里**） |
+| `build_market.py` | 把三者内联成**单文件** `plugin-market/index.html` + 静态体检；`--check` / `--install` |
+| `market/catalog.json` | 策展目录（构建时内联为离线兜底 SEED） |
+| `market/crawl_topic.py` | 爬 GitHub `topic:openrevo-plugin` → catalog（`CURATED` 集合标「已审核」） |
+| `market/validate_catalog.py` | 目录结构校验 E1–E10 |
+| `.github/workflows/refresh-catalog.yml` | 每小时自动爬，有变更才提交 |
+| `plugin-market/` | 构建产物（已入库，clone 后可 `--install` 即用） |
+| `_tools/market-{preview.html,verify.sh,shots.sh}` | 等价宿主环境预览 + 验收闸 + 出图 |
 
-发令牌时六槽只喂两个色：`hue_block("pwr", v["important"])` + 其余五个 `hue_block(k, v["accent"])`；
-宿主私有 `--accent-pwr/-beast` → important、`--accent-gpu/-cool/-rgb/-lux` → accent。
-**唯一有意保留的第三个颜色**是主控台 `.status-dot.dot-on` 的 `--wf-ok` 绿（4 个 8px 圆点）——那是设备开关的真实状态。
-机制、内联覆盖清单与踩坑见 `reference/skin-authoring.md` §3.1 / §6.4；验收口径见下面的清单。
+```bash
+python build_market.py             # 构建 + 产物自检
+python build_market.py --install   # 构建并安装到 %APPDATA%\OpenRevo\plugins\plugin-market
+bash _tools/market-verify.sh cyber # 验收闸（必跑；另跑 mono 主题）
+python market/validate_catalog.py market/catalog.json
+```
 
-## 标准工作流
+**市场的核心设计取舍（都由宿主约束推导而来）**：
 
-| 步骤 | 做什么 | 去哪看 |
-|---|---|---|
-| 1. 取真值 | 从 `open-revo.exe` 抽宿主 CSS/JS（`[path][brotli payload]` 格式）、核对真实类名与宿主 `!important` 对手规则 | `reference/host-truth-extraction.md` |
-| 2. 写样式 | `src/base.css`（纯结构，全部选择器带 `__SKIN_ID__` 占位）+ `build_skins.py` 的 `VARIANTS` 令牌表 | `reference/skin-authoring.md` |
-| 3. 本地预览 | `preview.html` / `preview-mini.html` 用**真实宿主类名 + 真实宿主 CSS** 复刻双面板，注入方式与宿主一致（`<style>` textContent，不是 `<link>`） | `reference/preview-and-audit.md` |
-| 4. 无头审计 | `bash _tools/audit.sh` 取 computedStyle；用直方图/边缘签名/差分判断不透明与版式 | `reference/preview-and-audit.md` |
-| 5. 真机取证 | 提权重启 → 唤醒/展开 → 置顶抓图 → 直方图 + 列行边缘 + 与预览分块 MAE | `reference/real-machine-verification.md` |
+* **身份 = `owner/repo[/subpath]`**，绝不用展示名当键（展示名会撞车）。`id` 只作为插件目录名。
+* **能力披露是三态**：`[...]` = 扫过并检出；`[]` = 扫过未检出；`null` = **没扫过**。
+  爬虫一律写 `null`，UI 渲染成「未扫描」。**绝不能写 `[]`** —— 那等于撒谎说「检查过，很干净」。
+* **`stars: null` = 取不到**，排序放最后，绝不当作 `0`（「比 0 还不受欢迎」）。
+* **失败不伪装**：在线目录拉不到时保留兜底数据，meta 行**如实**写
+  `内置目录 · N 条（未连上在线目录：HTTP 404）`。爬虫失败时**不写文件**，让上次产物继续服务。
+* **不做假的一键安装**：宿主没有安装 IPC（§1.2），所以市场给**可复制的 PowerShell `git clone` 命令**，
+  并在弹窗顶部**明说**「本版宿主没有开放安装接口」。下载动作也不做 —— 无 `allow-downloads`。
+* **主题靠镜像**：iframe 是独立文档，宿主 `:root` 令牌**不继承** → 内联一份同名同值令牌，
+  并用 `MutationObserver` 监听父文档 `data-theme`（cyber / mono / light）实时镜像。
+* **剪贴板三层降级**：`navigator.clipboard` → `document.execCommand('copy')` → 让用户手动选中。
+  沙盒下第一层可能被权限拦，**后两层是必需的，不是冗余**。
 
-## 验收清单
+### 3.1 验收闸 `market-verify.sh` 的判据
 
-- [ ] `python build_skins.py --install` 后 `<id>\theme.css` 与 `%APPDATA%\OpenRevo\plugins\<id>\theme.css` **字节一致**
-- [ ] 四套变体审计里 `root.blur = none`、`root.bg` = 该变体实色；迷你 `--theme-pwr` 等读的是**皮肤镜像值**而不是宿主 mono 的 `#ffffff`
-- [ ] **配色**：`PAGE=preview-mini.html bash _tools/audit.sh` 与 `bash _tools/audit.sh` 四套全部 `dom.hueFamilies = 2`；
-      `python _tools\census.py _shots\mini-<id>.png` 报**色族数量 = 2**；
-      六个 `--theme-*` 里只有 `pwr` 是暖橙，`gpu/hz/lux/kbd/bat` 全等于 `--wf-accent`；
-      `--accent-pwr = --accent-beast = --wf-important`、`--accent-gpu/-cool/-rgb/-lux = --wf-accent`
-- [ ] **正向条件**（**只看族数=2 不算过** —— 坏读数里全是宿主原色时族数也恰好是 2，见 `pitfalls.md` #35 / #39）：
-      迷你 `skin_active` = 本变体、`rules_applied = 118`、`settle.remounts = 1`、`content.size = 410x621`；
-      `ready.dot` / `themeBtn.cyber` / `oem.blocked` / `sponsorHeart` = accent、`oem.running` = important
-- [ ] **以上全部由 `bash _tools/verify.sh` 断言**（主窗 + 迷你各四套，共 132 条）；动过预览页或皮肤 CSS 后，
-      另跑 `PAGES=preview-mini.html:mini bash _tools/_stress.sh 48 8` 确认「异常 0 次」（偶发竞态只有它能抓）
-- [ ] **自定义背景（可选功能）**：`bash _tools/verify-bg.sh` 全绿 —— 它**第一条就是**「既有 132 条无回归」；
-      默认口径只出**独立插件** `bg-custom`（17 条）；只有显式 `--targets` 时才校验派生皮肤
-      `<id>-bg\theme.css` 与原皮肤**逐行相同**（只允许 id 替换与标题多出的「· 自定义背景」）、
-      末尾恰好 **3 条**背景规则；浏览器**真解码**出图（`bg.image.loaded = true <W>x<H> dataURI <N>B`，
-      尺寸须与 PIL 读出的产物一致）；停用后 `bash _tools/verify-bg.sh off` 须报零泄漏
-      （`bg.token.photo = no`、`bg.photo.count = 0`、产物目录已删）。细节见 `reference/background-plugin.md`
-- [ ] 预览页注入皮肤后，没有元素停在 `buttonface rgb(240,240,240)`
-- [ ] 真机主窗：列边缘在 CSS **224.7 / 225.3** 处最强（侧栏生效）、宿主调色板 `(11,13,17)/(16,18,25)/(26,28,35)…` **计数为 0**
-- [ ] 真机迷你面板：宿主色 ≈ 0、`(32,32,32)`/`(44,44,44)` 占比与预览一致（分块 MAE ≈ 20 以内）
-- [ ] 窗口 < 760 CSS px 时导航自动退回顶部横条（`@media (max-width:760px)` 回退），且迷你面板完全不受侧栏规则影响
-- [ ] `config.json` 回到用户原状（`active_skin` 是用户选的那套；临时改过的字段已还原）
+`_tools/market-verify.sh [theme]` 在**等价宿主环境**（`_tools/market-preview.html` 复刻
+`srcDoc` + sandbox + 父窗口桥）里跑预览页，退出码 0 = PASS。它断言：
+`ready` 为真、`cards > 0`、**JS 错误为 0**、安装弹窗能打开且含命令与披露项、
+「实时发现」能点且不抛异常、mono 下类型徽标去饱和（`sat < 0.12`）。
 
-## 参考文件地图
+> 走 **HTTP 而非 `file://`**：真实宿主里插件文档 origin 是 `tauri://localhost`（CORS 语义），
+> `file://` 下 `fetch` 直接被拒，会让「目录能拉下来」这条路径永远测不到。
+
+---
+
+## 4. 皮肤工具链（产物已移除，链路仍可用）
+
+```bash
+python build_skins.py            # 生成四套 skin-<id>\（唯一正确路径）
+python build_skins.py --install  # 生成并安装
+bash _tools/verify.sh            # 验收总闸：132 条断言（先 build_skins.py！见 §0.1）
+bash _tools/audit.sh             # 四套变体 computedStyle 审计 → _audit\<id>.audit.txt
+bash _tools/verify-bg.sh         # 背景链验收（第一条就是「既有 132 条无回归」）
+PAGES=preview-mini.html:mini bash _tools/_stress.sh 48 8   # 改过预览页/皮肤 CSS 必跑，须「异常 0 次」
+```
+
+改皮肤只改两处：`src/base.css`（纯结构，全部选择器带 `__SKIN_ID__` 占位）+ `build_skins.py` 的 `VARIANTS` 令牌表。
+
+**验收只认 `verify.sh` 的 exit code**：断言 = 主窗 9 条 × 4 套 + 迷你 22 条 × 4 套 + 像素普查 4 条 = **132 条**，
+`exit 1` 不许交付。`dom.hueFamilies = 2` **单独出现不算通过**（坏读数里全是宿主原色时族数也恰好是 2）——
+必须同时满足**正向条件**（迷你 `skin_active` = 本变体、`rules_applied = 118`、`settle.remounts = 1`、
+`content.size = 410x621`、`ready.dot` / `themeBtn.cyber` / `oem.blocked` / `sponsorHeart` = 本变体 accent、
+`oem.running` = important）。
+
+**背景插件**（独立链）：真值在 `bg.config.json`，模板在 `src/background.css`，
+改完跑 `python build_background.py build` 再跑 `bash _tools/verify-bg.sh`。
+产物 `bg-custom\` 默认入库；`<id>-bg\` 派生皮肤只在显式 `--targets` 时才有。
+按用户口径 **m00785「既然已知不行那就先不做」，它刻意没装进宿主、没激活**。
+
+---
+
+## 5. 参考文件地图
 
 ```
 docs\
-├── SKILL.md                              # 本文件：硬约束 + 工作流 + 验收清单
-├── devlog.md                             # 开发记录：时间线 + 每一步的数字证据 + 未决项
+├── SKILL.md                              # 本文件：状态 + 硬约束 + 工作流 + 验收
+├── devlog.md                             # 开发记录：时间线 + 每步数字证据 + 未决项
 ├── README.md                             # 文档与技能包怎么用、维护约定
-├── OpenRevo_第三方插件开发手册.md          # 官方手册 v1.0（存档原文）
+├── OpenRevo_第三方插件开发手册.md          # 官方手册 v1.0（存档 ≠ 行为准则）
 └── reference\
-    ├── plugin-manual-digest.md            # 手册消化件 + 「手册 ≠ 发行版」对照表
-    ├── host-truth-extraction.md           # 从 exe 抽宿主 CSS/JS、DOM 结构、宿主令牌与对手规则
-    ├── skin-authoring.md                  # manifest/目录规范、令牌架构、特异性阶梯、双面板改造配方
-    ├── background-plugin.md               # 自定义背景图独立插件：data URI、遮罩同层、单 CSS 通道约束、背景验收
-    ├── preview-and-audit.md               # 预览页能力、无头 Chrome 命令、审计与像素判据
-    ├── real-machine-verification.md       # 真机流程：提权重启/唤醒/置顶抓图/度量（含实测基线数字）
-    ├── environment-and-tools.md           # 环境硬事实 + 34 个工具地图 + 证据索引 + 回退清单
-    └── pitfalls.md                        # 踩坑总表（按「现象 → 原因 → 对策」）
+    ├── plugin-dev-0.8.8-skill.md         # 官方新版 Skill（0.8.8）逐条实测对照 + 背景壁纸通道
+    ├── plugin-manual-digest.md           # 手册消化件 + 「手册 ≠ 发行版」对照表
+    ├── host-truth-extraction.md          # 从 exe 抽宿主 CSS/JS；宿主 DOM/令牌/!important 对手规则
+    ├── skin-authoring.md                 # manifest/目录、令牌与镜像架构、特异性阶梯、双面板配方
+    ├── background-plugin.md              # 背景插件：data URI、遮罩同层、background 独立通道
+    ├── preview-and-audit.md              # 预览页能力与 URL 参数、无头 Chrome、像素判据
+    ├── real-machine-verification.md      # 提权重启/唤醒/置顶抓图/度量与实测基线
+    ├── environment-and-tools.md          # 环境硬事实 + 工具地图 + 证据索引 + 回退清单
+    ├── market-host-constraints.md        # 市场为什么长这样：0.9.1 tab 契约 / 无安装 IPC 取证
+    └── pitfalls.md                       # 踩坑总表：现象 → 原因 → 对策
 ```
 
-## 现状快照（2026-10-04 收尾时）
+## 6. 现状快照（2026-10-17）
 
-* 四套皮肤已安装并被用户在宿主【插件】页选用；`active_skin` 现在是 `skin-win11-dark`
-  （**宿主自己写成的** —— 改名后旧 ID 悬空，宿主启动时按新 ID 自愈）。皮肤互斥、切换 0ms 热加载。
-* 主窗：WinUI3 左侧栏（224px）+ 完全不透明，**真机已确证**（`_shots\real-dash-1500.png`，1702×1213）。
-* 迷你面板：同步 WinUI3 化 + 不透明，**真机已确证**（`_shots\real-mini-clean.png`）。
-* **配色已收敛为二色体系**：迷你面板色相族 6 → 2，主控台 2 族（accent + 状态点绿）。
-  验收 = `bash _tools/verify.sh` **132 条断言全绿**（`exit 0` 才算过）；曾有的偶发竞态（并发下 ≈17%）
-  已由 `preview-mini.html` 的 `settleStyle()` 收口，`settle.remounts = 1` 是正向证据之一。
-* **自定义背景已交付**（2026-10-04 续，**独立插件** `bg-custom`，与 win skin 无耦合）：图片内联 base64
-  `data:` URI、遮罩与照片同层叠（层数恒为 2）。默认产物 = `bg-custom`（宿主默认 UI 专用，17 条断言）；
-  `<id>-bg` 派生皮肤（皮肤 + 背景同份 theme.css）降级为 `--targets` 显式开启的可选导出。
-  验收 = `bash _tools/verify-bg.sh`（默认 18 / 派生 68 / off 10~18 条，按配置推导）；配置真值 = `bg.config.json`，
-  命令行 = `build_background.py`；细节见 `reference/background-plugin.md`。
-  历史约束（**0.8.7**）：宿主本身没有任何背景图能力（exe 里 `background_image|backgroundImage|wallpaper|bg_image`
-  命中 0、config 无此键），背景只能由插件注入的 `theme.css` 承载；全树只有一处 CSS 注入点
-  （`<style id="openrevo-custom-skin">` ← `load_plugin_theme_css`），而 `active_skin` 是**单值** ⇒
-  那时**背景插件与 Fluent 皮肤在宿主层面互斥**。
-  **✅ 0.8.8 已解除**：宿主新增 `plugin_type:"background"` + `active_background` 独立槽位 →
-  `<style id="openrevo-custom-background">`，与皮肤的 `active_skin` → `<style id="openrevo-theme-skin">`
-  可同时启用；另有 Background Engine 零代码壁纸（只放 manifest + 固定文件名的图）。
-  核查件见 `reference/plugin-dev-0.8.8-skill.md`（本轮逐条实测，含 3 处「skill 写了但宿主没有」的更正）。
-  **⚠️ 按用户口径 m00785「既然已知不行那就先不做」，它刻意没装进宿主、也没激活**（宿主侧零改动，
-  `active_skin` 仍是 `skin-win11-dark`）；0.8.8 虽已解除卡点，但本仓库产物仍是 `plugin_type:"skin"` 形态，
-  改造前装上仍会顶掉皮肤 —— 改造清单见 `reference/plugin-dev-0.8.8-skill.md` §7 第 8 项。
-* 真机取证的重要结论：**截图不能判别「换肤是否生效」** —— 改名前后 `theme.css` 逐字节同源，像素必然一样；
-  招牌色也不能当正控（精确命中 0 px）。详见 `reference/real-machine-verification.md` §9。
-* 已知残留（不影响「侧栏 + 不透明」两条结论）：迷你面板底部有一条细横向滚动条（宿主自身内容 **410×621** CSS > 窗口 610，
-  纵向滚动条是宿主固有的，皮肤把它从 4px 加宽到 12px 后才引出横条）；主窗顶部 ~100 CSS px 与预览有亮度差
-  （抓图时宿主停在别的 tab 页）。两者都写进 `devlog.md` 的「未决」段。
-* 现场残留（要交接的东西）：桌面上还留着一次抓图唤醒的大面板、`config.json` 有三个字段未替用户还原 ——
-  清单在 `reference/environment-and-tools.md` §4。
-* 文档里的**数字**都在 2026-10-03 对着磁盘/宿主复核过一轮（修正了 `host-shell.css` 体积、CSS 规则数、`preview.html`
-  行数、`build_skins.py` 行号等），并补上了「宿主自我更新」的复核流程与 `wins.ps1` 的澄清；核对过程与证据见 `devlog.md` §9。
+* 宿主 **0.9.1**；插件目录里**只有 `plugin-market`**；`active_skin` / `active_background` 均为 `null`。
+* **四套皮肤产物已删除**（仓库 + 宿主 config 残留），工具链保留（§0.1）。
+* 插件市场已交付并验收：`market-verify.sh cyber` 与 `mono` 双主题 PASS（cards=2、badges=8、0 JS 错误）。
+* `market/catalog.json` 收录 2 条（`bg-custom`、`plugin-market`），爬虫 `CURATED` 同步收敛。
+* 宿主缺失接口清单已出（桌面《OpenRevo 插件市场-宿主缺失接口清单.md》）：市场真正用到的宿主 IPC 只有 2 个
+  （`get_custom_plugins`、`open_plugins_dir`），安装链路的接口一个都没有。
+* 真机验证的边界：无法在真实宿主里驱动 CDP 抓图（`requireAdministrator` + 计划任务 `RunLevel=Highest`，
+  且 9222 被用户 Chrome 占用）⇒ 上限是「等价沙盒 + 宿主目录枚举」。
