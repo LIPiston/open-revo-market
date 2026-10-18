@@ -8,7 +8,7 @@
 >
 > | 新宿主新增（在 exe 命令表逐字核实） | 本页对应结论 |
 > |---|---|
-> | `install_plugin_from_url { url, subpath?, sha256? }` | §2「没有安装 IPC」→ **已有** |
+> | `install_plugin_from_url { id, url, subpath?, sha256? }` | §2「没有安装 IPC」→ **已有** |
 > | `uninstall_plugin { pluginId }`（移入回收站） | 同上 → **已有** |
 > | `reload_plugins`、`get_plugin_manifest { pluginId }` | 同上 → **已有** |
 > | `get_plugin_host_capabilities` → `host_version` + `can_*` 能力位 | 按版本号判断 → **改为运行时探测** |

@@ -79,7 +79,7 @@ get_active_background
 新宿主在这之外新增（逐字取自 exe 命令注册表，详见 `reference/host-plugin-ipc.md`）：
 
 ```
-install_plugin_from_url { url, subpath?, sha256? }   uninstall_plugin { pluginId }
+install_plugin_from_url { id, url, subpath?, sha256? }   uninstall_plugin { pluginId }
 reload_plugins { }                                   get_plugin_manifest { pluginId }
 set_plugin_enabled_unified { pluginId, enabled }     get_plugin_host_capabilities { }
 open_external_url { url }                            write_clipboard { text }

@@ -23,7 +23,7 @@ mtime 2026-10-18 17:03）新增的插件相关 IPC。
 | 命令 | 参数 | 返回 | 行为 |
 |---|---|---|---|
 | `get_plugin_host_capabilities` | — | `host_version` + `can_*` 能力位 | 见 §2 |
-| `install_plugin_from_url` | `url`, `subpath?`, `sha256?` | 安装结果 | 下载 + 校验 + 解压 + 落盘 + 热重载 |
+| `install_plugin_from_url` | `id`, `url`, `subpath?`, `sha256?` | 安装结果 | 下载 + 校验 + 解压 + 落盘 + 热重载 |
 | `uninstall_plugin` | `pluginId` | 布尔 | 停服务 → 清配置 → 移入**回收站** |
 | `reload_plugins` | — | 插件列表 | 重扫插件目录 |
 | `get_plugin_manifest` | `pluginId` | manifest 原文 | 读已装插件的清单 |
@@ -36,6 +36,23 @@ mtime 2026-10-18 17:03）新增的插件相关 IPC。
 
 > ⚠️ **`restart_plugin_service` 不存在。** 第三方文档里写了这一条，但 exe 里
 > `restart_plugin` 全 0 命中，也不在分发比较链里。要重启只能 stop + start。
+
+### 1.1 为什么 `id` 差点被漏掉（取证方法的一次翻车）
+
+命令名后面紧跟的明文是 `install_plugin_from_url` + `subpath` + `sha256`，
+`id` 与 `url` **不在这个窗口里** —— 它们被其它命令复用，已被编译器去重到别处。
+只照着这个窗口抄，就会得出「参数是 `{ url, subpath?, sha256? }`」的错误结论，
+真机上表现为：
+
+```
+invalid args `id` for command `install_plugin_from_url`:
+command install_plugin_from_url missing required key id
+```
+
+**教训**：命令名附近的可打印串只能证明「这些字段属于这条命令」，
+**不能证明「这条命令只有这些字段」**。必需字段要另找证据 ——
+宿主的 serde 报错正是最硬的证据（`missing required key <名字>`）。
+所以「0 命中 ≠ 不存在」这条要再加半句：**「命中了的也只是全部字段的一个子集」**。
 
 ## 2. `HostCapabilities` 结构
 

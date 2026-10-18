@@ -743,7 +743,8 @@ j = async (S = !1) => { b(!0); try { const D = await m("get_custom_plugins") || 
 
 * **能力探测**：启动即调 `get_plugin_host_capabilities`，按 `can_install` / `can_uninstall` /
   `can_reload` / `can_read_manifest` 决定 UI。命令不存在 ⇒ 全部降级，**不报错**。
-* **一键安装**：`install_plugin_from_url({ url: codeload 归档, subpath? , sha256? })`。
+* **一键安装**：`install_plugin_from_url({ id, url: codeload 归档, subpath?, sha256? })`
+  （`id` 是必需项 —— 这里当初漏了，见 §20）。
   下载/校验/解压/落盘全在宿主侧；市场不下载、不写盘。
 * **卸载**：`uninstall_plugin({ pluginId })` → 移入回收站；确认用页面内弹窗。
 * **自动重扫**：装完调 `reload_plugins`，失败退回 `get_custom_plugins`。
@@ -880,3 +881,101 @@ README.md ← 新写的索引：目录说明、四套皮肤规格、怎么重新
 （`active_background` → `<style id="openrevo-custom-background">`），
 它从 0.8.8 起就与皮肤槽位正交，可以共存，不需要派生皮肤。
 旧实现（`plugin_type` 仍是 `"skin"`）在桌面存档的 `bg-custom/` 里。
+
+---
+
+## 20. 真机报错：`install_plugin_from_url` 少了必需参数 `id`（2026-10-18 第十一轮）
+
+### 20.1 现象
+
+真机点【安装】：
+
+```
+安装失败: invalid args `id` for command `install_plugin_from_url`:
+command install_plugin_from_url missing required key id
+```
+
+### 20.2 根因：取证窗口只看到了字段表的子集
+
+`install_plugin_from_url` 的必需参数实际是 **`{ id, url, subpath?, sha256? }`**。
+`id` 不是可选的，它决定**安装后的目录名**（对应错误串
+`Plugin ID contains illegal characters or path separators`、
+`Security violation: Target is outside of plugins directory`）。
+
+当初从 exe 取证时，扫的是命令名紧跟的可打印串，得到：
+
+```
+install_plugin_from_url | subpath | sha256 | uninstall_plugin | ...
+```
+
+`id` 与 `url` **不在这个窗口里** —— 它们被其它命令复用，已被编译器**去重到别处**。
+那份「紧邻串」只能证明「subpath/sha256 属于这条命令」，
+**不能证明「这条命令只有这些字段」**。而 §18 用的那句「0 命中 ≠ 命令不存在」，
+反过来还缺半句：**命中了的也只是全部字段的一个子集**。
+
+### 20.3 为什么验收没抓到
+
+两个原因叠加，缺一不可：
+
+1. **mock 比真宿主松**。`_tools/market-preview.html` 的
+   `install_plugin_from_url` 分支对任何参数都回 `{ id: 'mock-installed' }` ——
+   从不校验必需字段。假宿主比真宿主宽容，等于把真实故障藏进「全绿」里。
+2. **市场自己 catch 了异常**。`installEntry` 抛错后走 `catch` → 只弹 toast，
+   不产生未捕获错误；而验收只统计 `errors.length`，自然看不到。
+   真机上那条报错文案，在 `toast` 里明明白白，验收却当成 PASS。
+
+### 20.4 修复
+
+| 位置 | 改动 |
+|---|---|
+| `market/src/market.js` | 调用改 `{ id: entry.id, url: archiveUrl(entry) }`；发 IPC 前先按宿主同口径挡非法 id（分隔符 / `..`） |
+| `_tools/market-preview.html` | mock 按真宿主 serde 规则拒收：缺 `id`/`url`、非 https、id 含分隔符、subpath 含 `..`，原因记进 `mockErrors` |
+| 同上 | 演练结果新增 `stillOpen`（弹窗没关 = `installEntry` 抛了）、`toast`、`args` |
+| `_tools/market-verify.sh` | 判据加 `stillOpen === false` + `mockErrors` 为空 + `args.id` / `args.url` 存在；失败时直接打印宿主拒收原因 |
+| `build_market.py` | 断言参数对象含 `id`/`url`（参数是变量 `args`，所以校验构造处而不是调用处） |
+| 文档 | `SKILL.md` / `market/README.md` / `host-plugin-ipc.md` / `market-host-constraints.md` 的签名全部补 `id` |
+| `pitfalls.md` | 新增 **#46**，含那条通用教训 |
+
+### 20.5 反向验证（两处都做了）
+
+**构建断言**：把 `{ id: entry.id, url }` 改成 `{ url }` → `build_market.py --check` 立刻报
+
+```
+install_plugin_from_url 必须传 id（宿主必需字段）
+```
+
+**验收判据**：直接改产物（绕过构建期断言）后跑 `market-verify.sh cyber new`，复现出与真机一致的输出：
+
+```
+install: {'invoked': True, 'stillOpen': True,
+          'toast': '安装失败：invalid args `id` for command `install_plugin_from_url`: ...',
+          'mockErrors': ['missing required key id'], ...}
+宿主拒收的调用： ['missing required key id']
+安装弹窗未关闭 —— installEntry 抛了： 安装失败：...
+RESULT: FAIL
+```
+
+修好后四组全绿：`cyber/new`、`cyber/old`、`mono/new`、`mono/old` 均 PASS，
+`args` 实读为 `{'id': 'plugin-market', 'url': 'https://codeload.github.com/...', 'subpath': 'plugin-market'}`。
+
+### 20.6 顺带查清：topic 收录现状
+
+「给仓库加 topic 就能被探测到」这句话**当前不成立**，因为 topic 还没加：
+
+```
+gh api repos/LIPiston/open-revo-market/topics  →  {"names": []}
+api.github.com/search/repositories?q=topic:openrevo-plugin  →  total_count: 0
+```
+
+GitHub 的 topic 搜索本身是正常的（`topic:tauri` 有 16,928 条），所以不是接口问题。
+爬虫工作流 `Refresh plugin catalog` 每小时都在跑且成功（最近几次 9~13 s），
+但它搜不到任何仓库 ⇒ 目录只能靠 `local_entries()` 这份兜底。
+
+另外注意一条**本地目录与远端目录的差异**：`local_entries()` 会把本仓库
+根目录下的插件收录进来，而 `plugin-market/` 是**子目录插件**、根目录没有 `manifest.json`，
+所以它走的是 `detect_subpaths()` 分支。这条路径的前提是仓库本身先被 topic 搜索命中 ——
+没有 topic 就一步也走不到。
+
+要让「市场能被别人搜到」，最少要做两步：
+① `gh repo edit --add-topic openrevo-plugin`；
+② 等下一次整点爬虫（或本地 `python market/crawl_topic.py --merge`）把条目写进目录。
