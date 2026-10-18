@@ -46,7 +46,7 @@ python build_market.py --install
 一键安装时市场只发一条 IPC，下载 / 校验 / 解压 / 落盘全在宿主侧：
 
 ```js
-invoke('install_plugin_from_url', { url, subpath? })   // url 必须是 https
+invoke('install_plugin_from_url', { url, subpath?, sha256? })   // url 必须是 https
 ```
 
 宿主自己负责：拒绝非 HTTPS、可选 `sha256` 校验、解压防 Zip Slip、目标必须落在 AppData 边界内。
@@ -60,7 +60,8 @@ invoke('install_plugin_from_url', { url, subpath? })   // url 必须是 https
 > 归档根部会多一层 `repo-branch/` 目录；`subpath` 由宿主解析。若某个条目解析不对，
 > 弹窗里始终保留「复制命令」的手动备用路径。
 
-取证细节（含 exe 偏移与逐字代码）见 [`../docs/reference/market-host-constraints.md`](../docs/reference/market-host-constraints.md)。
+取证细节（含命令注册表与安装器的错误串）见 [`../docs/reference/host-plugin-ipc.md`](../docs/reference/host-plugin-ipc.md)；
+老宿主（完全没有安装 IPC）的基线在 [`../docs/reference/market-host-constraints.md`](../docs/reference/market-host-constraints.md)。
 
 ---
 
@@ -98,7 +99,7 @@ market/
 │   ├── market.css            # 样式（内联进产物）
 │   └── market.js             # 应用逻辑（内联进产物）
 ├── crawl_topic.py            # 抓 openrevo-plugin topic → catalog.json
-├── validate_catalog.py       # 目录校验（E1–E10）
+├── validate_catalog.py       # 目录校验（E1–E11）
 ├── catalog.json              # 生成的目录（CI 每小时刷新）
 └── PLUGIN_README.md          # 会随插件一起装进插件目录
 

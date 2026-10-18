@@ -48,17 +48,10 @@ const SEED = {
   format: 1,
   generatedAt: null,
   source: 'builtin-seed',
-  count: 2,
+  count: 1,
   plugins: [
     {
-      id: 'bg-custom', name: '自定义背景图', version: '1.0.0',
-      author: 'OpenRevo Fluent Skin Kit', plugin_type: 'skin',
-      description: '只提供背景图，不改动宿主默认界面（独立于任何皮肤）。由 build_background.py 生成。',
-      repo: 'LIPiston/open-revo-market', subpath: 'bg-custom', branch: 'main',
-      stars: null, unreviewed: false, capabilities: null,
-    },
-    {
-      id: 'plugin-market', name: '插件市场', version: '1.0.0',
+      id: 'plugin-market', name: '插件市场', version: '1.1.0',
       author: 'LIPiston', plugin_type: 'tab',
       description: '浏览 GitHub 上带 openrevo-plugin topic 的第三方插件，查看能力披露，并给出最短安装路径。',
       repo: 'LIPiston/open-revo-market', subpath: 'plugin-market', branch: 'main',

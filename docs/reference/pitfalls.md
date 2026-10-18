@@ -2,6 +2,12 @@
 
 按「现象 → 原因 → 对策」排列。序号用于交叉引用。
 
+> **皮肤链已于 2026-10-18 整体移除**（见 `SKILL.md` §4）。表中 #5/#6/#12/#21~#26/#33~#35/#39 等条目
+> 讲的是当时那套皮肤/预览实现，**代码与工具都已不在仓库里**，保留它们只为两类用途：
+> ① 不重犯同样的判断错误（例如只数色族就判「通过」）；② 外部文档仍按编号引用它们。
+> 现在可执行的两条验收是 `python build_market.py --check` 与 `bash _tools/market-verify.sh {cyber,mono}`。
+> 若要彻底清掉这些历史条目，需同步改掉对 #26 / #30 / #38 / #39 的交叉引用。
+
 | # | 现象 | 原因 | 对策 |
 |---|---|---|---|
 | 1 | 运行时启用 `<link disabled>` 后，**已存在**的元素保持旧样式 | 样式表启用是异步的，元素不会立刻重算 | 用 `<style>.textContent` 注入（宿主就是这个做法）；若非要 `<link>`，必须等 `load` 之后再采样 |
@@ -48,7 +54,7 @@
 | 42 | 照第三方文档调 `install_plugin_from_url`，传了 `expectedSha256`，装完报校验失败或参数无效 | 真实参数名是 **`sha256`**（不是 `expectedSha256`），另有 `url` 与可选的 `subpath`；`uninstall_plugin` 的参数是 **`pluginId`**（驼峰）。这些是 exe 命令表里的 serde 字段名，文档里写的可能与实现不一致 | 参数名逐字照 exe 命令注册表来。`build_market.py` 已加断言：源码里出现 `expectedSha256` 或缺少 `pluginId` 直接构建失败 |
 | 43 | 改了 `market/src/*`，装进宿主却**没变化** | `plugin-market/index.html` 是 `build_market.py` 生成的**单文件产物**，手改产物无效；且 `tab` 插件用 `srcDoc` 注入，基准 URL 是宿主文档（`tauri://localhost`）—— 任何 `<link>` / `<script src>` / `<img src="assets/…">` / `@import` 都取不到插件目录里的文件 | 只改 `market/src/`，改完 `python build_market.py --install`，再 `bash _tools/market-verify.sh cyber`（另跑 `mono`，且**两条宿主路径都跑**：`host=new` 与 `host=old`）。产物必须**单文件**（构建期会断言零外部引用） |
 | 44 | 市场卡片把「未扫描能力」显示成「未检出」，读者以为「检查过，很干净」 | 能力披露是**三态**不是布尔：`[...]` = 扫过并检出 / `[]` = 扫过未检出 / `null` = **没扫过**。爬虫不做真实扫描，若图省事写 `[]` 就等于撒谎 | 爬虫一律写 **`null`**，UI 渲染成「未扫描」。同理 `stars` 取不到写 **`null`** 而不是 `0`（排序放最后，别读成「比 0 还不受欢迎」）；在线目录拉不到**保留兜底数据并如实写明失败原因**（`未连上在线目录：HTTP 404`），绝不把「没连上」伪装成「目录是空的」 |
-| 45 | 删了 `skin-*\` 目录后跑 `_tools/verify.sh` / `audit.sh`，审计里 `rules_applied = none`、大片断言失败，看着像「皮肤 CSS 坏了」 | 这两个脚本按 `<skin_id>/theme.css` **逐个变体取样式**（`audit.sh` 默认四套 ID，`preview.html` 用同步 XHR 读 `<id>/theme.css`）。2026-10-17 四套皮肤产物已从仓库删除 ⇒ 取不到文件，皮肤根本没被注入 | 这是**输入缺失**，不是样式问题：先 `python build_skins.py` 重建四套产物，再跑验收。工具链保留正是为此（`build_background.py` / `bg_common.py` 也 `import build_skins`） |
+| 45 | 在旧文档指引下想跑皮肤验收，`_tools/verify.sh` / `audit.sh` 却**不存在**了 | 2026-10-18 按用户口径把皮肤与背景**整条链**移除了：四套 `skin-*` 产物与其生成器 `build_skins.py` / `src/base.css`、背景链、`preview*.html`、`verify.sh` / `audit.sh` / `_stress.sh` / `shots.sh` / `shoot1.sh` / `verify-bg.sh` / `set-active-skin.ps1`，以及四份对应文档。旧文档里「先 `python build_skins.py` 再跑验收」这类指引全部失效 | 仓库现在**只有市场一条链**，验收就是 `python build_market.py --check` + `bash _tools/market-verify.sh {cyber,mono}`。历史实现在 git 历史里（`git log --oneline -- build_skins.py`）。背景插件后续重做时**直接走宿主的 `plugin_type:"background"` 通道**，不要再引入 `build_skins` 依赖 —— 那条 import 正是上一轮工具链被迫保留的原因 |
 
 ## 一句话教训
 

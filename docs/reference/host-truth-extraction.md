@@ -1,5 +1,9 @@
 # 提取宿主真值（host truth extraction）
 
+> **皮肤/背景链已于 2026-10-18 从本仓库移除**（用户口径）。本页提到的 `skin-authoring.md` / `background-plugin.md` / `preview-and-audit.md` / `real-machine-verification.md`、`build_skins.py`、`src/base.css`、`preview*.html`、`verify.sh` / `audit.sh` 等**都已不在仓库里**，完整存档在桌面 `OpenRevo 皮肤技能存档\`（导出自提交 `7d5b5da`）。
+>
+> 本页保留的价值是**实测结论本身**（宿主真值、手册与发行版的出入），这些结论对写任何插件形态都有效；只是**照着跑命令会找不到文件**。
+
 **目的**：写插件前必须先知道宿主**真实的类名、令牌、`!important` 对手规则和 DOM 结构**。手册里的示例类名不可信。
 
 > **当前基线 = 0.9.1**（exe **9,368,576 B**）：抽取物在 `_extracted/v091/`

@@ -1,5 +1,9 @@
 # 开发者新版 Skill（0.8.8）· 逐条实测对照
 
+> **皮肤/背景链已于 2026-10-18 从本仓库移除**（用户口径）。本页提到的 `skin-authoring.md` / `background-plugin.md` / `preview-and-audit.md` / `real-machine-verification.md`、`build_skins.py`、`src/base.css`、`preview*.html`、`verify.sh` / `audit.sh` 等**都已不在仓库里**，完整存档在桌面 `OpenRevo 皮肤技能存档\`（导出自提交 `7d5b5da`）。
+>
+> 本页保留的价值是**实测结论本身**（宿主真值、手册与发行版的出入），这些结论对写任何插件形态都有效；只是**照着跑命令会找不到文件**。
+
 > **原文存档**：`D:\LIPis\desktop\openrevo-plugin-dev\SKILL.md`（415 行 / 16,190 B，官方 `openrevo-plugin-dev` skill）。
 > 本页是**消化 + 逐条取证**：把它的每条断言拿去和真实宿主（`open-revo.exe` **0.8.8**）比对，
 > 标注「✅ 属实 / ⚠️ 部分属实 / ❌ 不成立」，并写下取证位置。

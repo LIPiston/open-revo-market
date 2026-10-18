@@ -1,5 +1,9 @@
 # 官方开发手册 · 全文消化（v1.0 / 783 行 → 本页）
 
+> **皮肤/背景链已于 2026-10-18 从本仓库移除**（用户口径）。本页提到的 `skin-authoring.md` / `background-plugin.md` / `preview-and-audit.md` / `real-machine-verification.md`、`build_skins.py`、`src/base.css`、`preview*.html`、`verify.sh` / `audit.sh` 等**都已不在仓库里**，完整存档在桌面 `OpenRevo 皮肤技能存档\`（导出自提交 `7d5b5da`）。
+>
+> 本页保留的价值是**实测结论本身**（宿主真值、手册与发行版的出入），这些结论对写任何插件形态都有效；只是**照着跑命令会找不到文件**。
+
 > **原文存档**：`docs\OpenRevo_第三方插件开发手册.md`（官方 v1.0，自称「开发者圣经」）。本页是**消化件**：
 > 把 9 节 + 7 个用例压成可检索的事实，并逐条标注「与发行版不符」的地方（§10）。
 > **凡与发行版冲突，一律以发行版实测为准**（`host-truth-extraction.md` 是取证方法，`skin-authoring.md` 是皮肤落地）。

@@ -2,33 +2,12 @@
   "format": 1,
   "generatedAt": "2026-10-18T09:34:24+00:00",
   "topic": "openrevo-plugin",
-  "count": 2,
+  "count": 1,
   "plugins": [
-    {
-      "id": "bg-custom",
-      "name": "自定义背景图",
-      "version": "1.0.0",
-      "author": "OpenRevo Fluent Skin Kit",
-      "plugin_type": "skin",
-      "description": "只提供背景图，不改动宿主默认界面（独立于任何皮肤）。由 build_background.py 生成。",
-      "repo": "LIPiston/open-revo-market",
-      "subpath": "bg-custom",
-      "branch": "main",
-      "commit": null,
-      "stars": null,
-      "updatedAt": null,
-      "license": "MIT",
-      "unreviewed": false,
-      "capabilities": null,
-      "topics": [
-        "openrevo-plugin"
-      ],
-      "homepage": null
-    },
     {
       "id": "plugin-market",
       "name": "插件市场",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": "LIPiston",
       "plugin_type": "tab",
       "description": "浏览 GitHub 上带 openrevo-plugin topic 的第三方插件，查看能力披露，并给出最短安装路径。",

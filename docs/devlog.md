@@ -779,3 +779,104 @@ j = async (S = !1) => { b(!0); try { const D = await m("get_custom_plugins") || 
   （不是裸 brotli/zstd/xz），tab 的 sandbox 是否仍缺 `allow-downloads` / `allow-popups`
   只能从本机 WebView2 的 V8 代码缓存间接确认（`data-slot` / `osd-slot-*` 仍在用）。
 * `service` 伴随服务与 `postMessage` 桥未做端到端验证。
+
+---
+
+## 19. 移除皮肤与背景链，仓库收敛为市场一条链（2026-10-18 第十轮）
+
+### 19.1 用户口径
+
+> 「关于皮肤相关的内容先删除掉吧 / background 插件后续再制作」
+> 「关于皮肤的 skill 在桌面新建一个文件夹来存储」
+
+即：**代码从仓库删掉，知识存档到桌面**。背景不是删掉不做，是**以后重做**。
+
+### 19.2 为什么两条链必须一起删
+
+上次（§17）只删了四套产物、保留工具链，理由是硬依赖：
+`build_background.py` 与 `bg_common.py` 都 `import build_skins`
+（用 `skins.VARIANTS` / `PLUGINS_DIR` / `manifest` / `make_preview`）。
+
+既然背景要重做，**留半条链只会留下一个 import 就崩的半成品**。
+所以这次把皮肤链与背景链**整体**移除：
+
+| 移除 | 内容 |
+|---|---|
+| 皮肤 | `build_skins.py`、`src/base.css`、`preview.html`、`preview-mini.html` |
+| 背景 | `bg-custom/`、`build_background.py`、`bg_common.py`、`src/background.css`、`bg.config.json`、`assets/sample-wallpaper.jpg` |
+| 工具 | `verify.sh`、`audit.sh`、`_stress.sh`、`shots.sh`、`shoot1.sh`、`verify-bg.sh`、`set-active-skin.ps1`、`make-sample-wallpaper.py`、`repro-btn.html` |
+| 文档 | `skin-authoring.md`、`background-plugin.md`、`preview-and-audit.md`、`real-machine-verification.md` |
+| 证据 | 30 张皮肤截图 + 5 份真机抓图日志 |
+
+保留：`_extracted/`（宿主真值，写任何插件都要用）、`census.py`/`cmp.py`/`prof.py`/`ascii.py`
+（通用像素度量，与皮肤无关）、以及全部宿主进程/抓图工具。
+
+### 19.3 桌面存档
+
+`D:\LIPis\desktop\OpenRevo 皮肤技能存档\` —— 从提交 `7d5b5da`（删除前最后一次提交）导出，
+**69 个文件 / 3.9 MB**，保持原相对路径：
+
+```
+SKILL.md（当时的皮肤技能入口）  docs/README.md  docs/devlog.md（完整原始记录）
+reference/  skin-authoring · background-plugin · preview-and-audit · real-machine-verification
+build_skins.py  src/base.css  preview.html  preview-mini.html
+build_background.py  bg_common.py  bg.config.json  src/background.css  bg-custom/
+_tools/  verify.sh · audit.sh · _stress.sh · shots.sh · shoot1.sh · verify-bg.sh
+         set-active-skin.ps1 · make-sample-wallpaper.py · repro-btn.html · 四个度量脚本
+_shots/  30 张皮肤图 + 5 份抓图日志
+README.md ← 新写的索引：目录说明、四套皮肤规格、怎么重新启用、重做背景时的注意事项
+```
+
+导出后做了三项校验：`py_compile` 全部通过、`bash -n` 全部通过、
+`set-active-skin.ps1` 的 UTF-8 BOM 仍是 `ef bb bf`（`.ps1` 丢 BOM 会掉进 `pitfalls.md` #16 的 GBK 错位）。
+
+### 19.4 连带修掉的六处
+
+删完必须把引用一起收干净，否则下一个人会照着找不存在的文件：
+
+1. **目录**：`market/catalog.json` 2 条 → **1 条**（`bg-custom` 已不存在），`count` 同步；
+   `crawl_topic.py` 的 `CURATED` 去掉 `bg-custom`，否则爬虫会把一个不存在的条目重新加回来。
+2. **市场种子**：`market/src/market.js` 的 `SEED` 同去 `bg-custom`（`count: 1`），
+   否则断网时兜底目录里会有一个装不上的幽灵条目。
+3. **预览 mock**：`_tools/market-preview.html` 的 `INSTALLED` 与 `get_plugin_manifest` 返回值
+   从 `bg-custom` 改成 `plugin-market`。
+4. **`.gitignore`**：删掉 `*-bg/` 与 `bg-custom` 相关规则（那些路径已不存在）。
+5. **`pitfalls.md`**：#45 原本写「删了皮肤目录后要先 `build_skins.py` 重建」，现在工具也没了，
+   改写成「皮肤链已整体移除，仓库只有市场一条链」。表头加横幅说明哪些历史条目属于已删实现。
+6. **历史文档**：`plugin-dev-0.8.8-skill.md` / `plugin-manual-digest.md` / `host-truth-extraction.md`
+   三份虽然提到已删文件，但它们的价值是**实测结论**（宿主真值、手册与发行版的出入），
+   对写任何插件形态都有效 ⇒ 保留，但在页首加横幅指明「照命令跑会找不到文件，存档在桌面」。
+
+### 19.5 验收闸当场抓到的两个真问题
+
+这两个都不是「删了东西所以坏了」，而是**原有的验收写得不够严**，被这次改动暴露出来。
+
+**① 验收原来测的是 GitHub 上的旧目录。** 首次跑 `market-verify.sh cyber` 时
+`cards=2`，而本地目录只有 1 条 —— 市场优先拉远端 `catalog.json`，而本地改动还没 push，
+于是验收测到的是远端旧数据。改法：预览页支持 `?catalog=local`，
+把产物里的两个在线目录 URL **改写成本地相对路径**（直接替换字面量，不用劫持 `window.fetch` ——
+沙盒里 fetch 在脚本执行前就被市场模块捕获，事后替换实测不生效）。
+
+**② `cards > 0` 这种判据等于没判。** 「目录整个拉丢了」与「目录真的只有 1 条」在 `> 0` 下看起来一样。
+改成**精确等于本地 `market/catalog.json` 的条数**（`cards=1/1`）。
+提高判据后立刻发现 ①，否则它会被当成 PASS 悄悄放过。
+
+**③ 顺带发现主题断言是空转的。** 徽标选择器写死 `.mkt-badge.type-skin`，
+皮肤条目删掉后取到 `null`，而 `themeOk` 在 cyber 下默认 `true` ⇒ 断言恒真、什么都没测。
+改成 `.mkt-badge[class*="type-"]`，并要求「必须真的取到徽标」才算通过。
+
+### 19.6 验收
+
+* `python market/validate_catalog.py` → **1 条**通过
+* `python build_market.py --check` → 自检通过（62,250 字符）
+* `bash _tools/market-verify.sh cyber` → `host=new` PASS、`host=old` PASS（`cards=1/1`，0 JS 错误）
+* `bash _tools/market-verify.sh mono` → 双 PASS（徽标 sat=0.098）
+* `python build_market.py --install` → 已安装；`cmp` 三个文件逐字节一致
+
+### 19.7 重做背景插件时的口径
+
+**不要再引入 `build_skins` 依赖** —— 那条 import 正是当年工具链删不干净的原因。
+直接走宿主的 `plugin_type:"background"` 通道
+（`active_background` → `<style id="openrevo-custom-background">`），
+它从 0.8.8 起就与皮肤槽位正交，可以共存，不需要派生皮肤。
+旧实现（`plugin_type` 仍是 `"skin"`）在桌面存档的 `bg-custom/` 里。

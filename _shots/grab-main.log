@@ -1,6 +1,0 @@
-﻿[19:26:28] probe: hwnd=10030402 cls=tray_icon_app title='' rect=(38,110)-(1958,1227) 1920x1117 vis=False
-[19:26:28] found hwnd=10030402 pid=29828
-[19:26:31] rect=(38,110)-(1958,1227) 1920x1117
-[19:26:31] topmost=True
-[19:26:32] saved=D:\LIPis\Documents\deepseek-harness\default-workspace\openrevo-win-skin\_shots\real-main.png
-[19:26:32] hidden again
