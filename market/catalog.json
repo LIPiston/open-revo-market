@@ -1,8 +1,8 @@
 {
   "format": 1,
-  "generatedAt": "2026-10-18T13:59:45+00:00",
+  "generatedAt": "2026-10-18T17:20:56+00:00",
   "topic": "openrevo-plugin",
-  "count": 1,
+  "count": 2,
   "plugins": [
     {
       "id": "plugin-market",
@@ -14,13 +14,36 @@
       "repo": "LIPiston/open-revo-market",
       "subpath": "plugin-market",
       "branch": "main",
-      "commit": null,
-      "stars": null,
-      "updatedAt": null,
-      "license": "MIT",
+      "commit": "252761d644df702fa416d1c376d088fb9595143d",
+      "stars": 0,
+      "updatedAt": "2026-10-18T13:59:46Z",
+      "license": null,
       "unreviewed": false,
       "capabilities": null,
       "topics": [
+        "openrevo-plugin"
+      ],
+      "homepage": null
+    },
+    {
+      "id": "dgpu-igpu-saving",
+      "name": "核显省电（独显静默）",
+      "version": "0.1.0",
+      "author": "OpenRevo Community",
+      "plugin_type": "slot",
+      "description": "OpenRevo 第三方插件（非官方，与任何硬件厂商无隶属关系）：面向同方（TongFang）模具机型，在混合模式下于「显卡模式」与「屏幕亮度」之间提供一行「核显省电」开关。30/40 系：禁用/恢复显示设备（Windows PnP 设备层）；50 系：固件支持时让独显真正下线（含失败回滚）。",
+      "repo": "xmsjx/dgpu-igpu-saving",
+      "subpath": "",
+      "branch": "main",
+      "commit": "086349a0d3195932e0dd3b89017850c38c6a60fd",
+      "stars": 0,
+      "updatedAt": "2026-10-18T14:24:42Z",
+      "license": "MIT",
+      "unreviewed": true,
+      "capabilities": null,
+      "topics": [
+        "dgpu",
+        "openrevo",
         "openrevo-plugin"
       ],
       "homepage": null
