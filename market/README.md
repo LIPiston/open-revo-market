@@ -35,18 +35,31 @@ python build_market.py --install
 - **实时发现**：直接查 GitHub 上带 `openrevo-plugin` topic 的仓库，作者打完 topic 立刻可见，不必等爬虫；
 - 通过宿主的 `get_custom_plugins`（只读）**认出已安装**的插件并打标；
 - **能力披露**：逐条列出静态扫描检出的联网 / 文件读写等能力，危险组合单列（如"读凭据 + 有网络"）；
-- 给出一条**可直接粘贴的 PowerShell 安装命令**，把仓库（或其中某个子目录）放到插件目录。
+- **一键安装 / 卸载**：宿主开放了对应 IPC 时，点一下就装完，装完自动重扫；
+- 宿主没开放时，退回一条**可直接粘贴的 PowerShell 命令**，把仓库（或其中某个子目录）放到插件目录。
 
-**不能**（这是宿主限制，不是市场偷懒）：
+**安装方式由宿主能力决定，不是写死的**。市场启动时调 `get_plugin_host_capabilities`，
+按返回的能力位（`can_install` / `can_uninstall` / `can_reload` / `can_read_manifest` /
+`can_open_url` / `can_write_clipboard`）决定显示哪些按钮。能力位为假或该命令不存在时，
+市场整体降级到「浏览 + 复制命令」模式，**不报错、不假装能装**。
 
-> **v0.9.1 宿主没有开放任何安装接口。**
-> 实测：Rust 命令表里没有 `install_plugin` / `uninstall_plugin` / `reload_plugin`，
-> 也没有写插件目录的 IPC；Tauri 侧只挂了 `autostart` 与 `single-instance`，
-> **没有** `fs` / `dialog` / `shell` 插件；而 `tab` 插件的 iframe 是
-> `sandbox="allow-scripts allow-forms allow-same-origin"`，**没有 `allow-downloads`**，
-> 下载动作会被浏览器拦掉。
+一键安装时市场只发一条 IPC，下载 / 校验 / 解压 / 落盘全在宿主侧：
 
-所以点【安装】不会替你把文件下下来，而是弹出一张卡片：**复制命令 → 终端粘一次 → 回插件页刷新**。
+```js
+invoke('install_plugin_from_url', { url, subpath? })   // url 必须是 https
+```
+
+宿主自己负责：拒绝非 HTTPS、可选 `sha256` 校验、解压防 Zip Slip、目标必须落在 AppData 边界内。
+**市场不自己下载、不写盘** —— `tab` 的 iframe 既没有 `allow-downloads` 也没有 `allow-popups`，
+这类动作本来就不在插件手里。
+
+> ⚠️ 目录条目没带 `sha256` 时，宿主只能校验传输完整性，**证明不了内容没被篡改**。
+> 想升级为可验证安装，请给 `catalog.json` 条目补上 `sha256`。
+>
+> ⚠️ 一键安装走的是 GitHub 的源码归档（`codeload.github.com/<repo>/zip/refs/heads/<branch>`），
+> 归档根部会多一层 `repo-branch/` 目录；`subpath` 由宿主解析。若某个条目解析不对，
+> 弹窗里始终保留「复制命令」的手动备用路径。
+
 取证细节（含 exe 偏移与逐字代码）见 [`../docs/reference/market-host-constraints.md`](../docs/reference/market-host-constraints.md)。
 
 ---

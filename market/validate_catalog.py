@@ -14,6 +14,7 @@
   E8 必填字段        —— id/name/repo/plugin_type/description 必须存在（可为空串但要显式在）
   E9 无内联脚本      —— description 里不许出现 HTML/script（UI 会转义，但不该放进目录）
   E10 commit 形状    —— 有 commit 时必须是 40 位 hex
+  E11 sha256 形状    —— 有 sha256 时必须是 64 位 hex（会透传给宿主做完整性校验）
 
 用法：
     python market/validate_catalog.py [catalog.json]
@@ -33,6 +34,7 @@ KNOWN_CAPS = {
 }
 REQUIRED = ("id", "name", "repo", "plugin_type", "description", "capabilities", "unreviewed")
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
+HEX64 = re.compile(r"^[0-9a-f]{64}$")
 REPO_RE = re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
 
 
@@ -117,6 +119,12 @@ def validate(path: Path) -> list[str]:
         c = p.get("commit")
         if c is not None and not (isinstance(c, str) and HEX40.match(c)):
             errs.append(f"{where}: E10 commit 形状非法：{c!r}（应为 40 位 hex 或 null）")
+
+        # E11 sha256 是可选的「可验证安装」凭据：要么省略，要么写 64 位 hex。
+        # 市场会把它原样透传给宿主的 install_plugin_from_url，宿主据此拒绝被替换的包。
+        sha = p.get("sha256")
+        if sha is not None and not (isinstance(sha, str) and HEX64.match(sha)):
+            errs.append(f"{where}: E11 sha256 形状非法：{sha!r}（应为 64 位小写 hex 或省略）")
 
     return errs
 

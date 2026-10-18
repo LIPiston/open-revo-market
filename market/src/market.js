@@ -2,14 +2,26 @@
  * OpenRevo 插件市场 · 应用逻辑
  * 由 build_market.py 内联进 plugin-market/index.html。
  *
- * 宿主约束（v0.9.1 实测，详见 docs/reference/market-host-constraints.md）：
+ * 宿主约束（详见 docs/reference/market-host-constraints.md）：
  *  1. `tab` 插件跑在 `srcDoc` iframe（sandbox=allow-scripts allow-forms allow-same-origin），
  *     与宿主**同源** → 可访问 window.parent.__TAURI_INTERNALS__.invoke 与父文档 DOM。
- *  2. 该 iframe **没有** allow-downloads / allow-popups → 下载与 window.open 全部被拦。
- *     所以「一键下载安装」在本版宿主上做不到，只能做「复制命令 + 打开目录」的交接。
- *  3. 命令表里**没有** install_plugin / uninstall_plugin / 写插件目录的 IPC（实测 0 命中），
- *     也没有 fs/dialog/shell 等 Tauri 插件 —— 不要在 UI 里承诺做不到的事。
+ *  2. 该 iframe **没有** allow-downloads / allow-popups → 下载与 window.open 全部被拦，
+ *     所以**下载、解压、落盘全部交给宿主**，市场只发一条 IPC。
+ *  3. 宿主能力**按运行时探测**，不按版本号猜：
+ *       get_plugin_host_capabilities -> { host_version, can_install, can_uninstall,
+ *                                         can_reload, can_open_url, can_write_clipboard,
+ *                                         can_read_manifest, can_manage_service }
+ *     该命令在旧宿主上不存在 → 自动降级为「复制命令」的交接模式。
  *  4. iframe 是独立文档，宿主 :root 令牌**不继承** → 主题靠读父文档 data-theme 手动镜像。
+ *
+ * 已核实的 IPC 签名（参数名逐字取自 exe 命令注册表，勿按文档臆改）：
+ *   install_plugin_from_url { url, subpath?, sha256? }  // url 必须是 https
+ *   uninstall_plugin        { pluginId }                // 移入回收站
+ *   reload_plugins          ()                          // 重扫目录，返回插件列表
+ *   get_plugin_manifest     { pluginId }
+ *   set_plugin_enabled_unified { pluginId, enabled }
+ *   open_external_url       { url }                     // 仅 http/https
+ *   write_clipboard         { text }
  * ========================================================================== */
 
 'use strict';
@@ -103,7 +115,12 @@ const state = {
   typeFilter: 'all',     // 'all' | plugin_type | '__installed__' | '__unreviewed__'
   sort: 'stars',         // 'stars' | 'name' | 'updated'
   installed: new Set(),  // 已安装插件 id（来自宿主 get_custom_plugins）
+  installedMeta: {},     // id -> { plugin_type, enabled }
   hostInfo: null,        // { hasBridge: boolean, error: string|null }
+  // 宿主能力位。null = 还没探测到（老宿主没有这个命令）。
+  // 只有显式为 true 的能力才允许在 UI 上承诺，绝不按版本号猜。
+  caps: null,
+  busy: null,            // 正在安装/卸载的 entry.id，用于禁用按钮
   live: null,            // 实时 topic 搜索结果
   liveLoading: false,
   liveError: null,
@@ -140,9 +157,15 @@ function toast(msg, isErr) {
   toastTimer = setTimeout(() => { el.hidden = true; }, 2600);
 }
 
-/** 复制到剪贴板。srcDoc iframe 里 navigator.clipboard 可能被权限拦，
- *  所以准备三层：异步 API → execCommand → 选中文本让用户手按 Ctrl+C。 */
+/** 复制到剪贴板。优先走宿主 IPC（沙盒 iframe 里 navigator.clipboard 常被拦），
+ *  再退回 Web API → execCommand。三层都不是冗余：每层都可能单独失效。 */
 async function copyText(text) {
+  if (state.caps && state.caps.can_write_clipboard === true) {
+    try {
+      await hostInvoke('write_clipboard', { text });
+      return true;
+    } catch (_) { /* 掉到下面几层 */ }
+  }
   try {
     if (navigator.clipboard && window.isSecureContext !== false) {
       await navigator.clipboard.writeText(text);
@@ -161,6 +184,20 @@ async function copyText(text) {
     document.body.removeChild(ta);
     if (ok) return true;
   } catch (_) { /* 落到最后一层 */ }
+  return false;
+}
+
+/** 在系统浏览器里打开链接。沙盒 iframe 没有 allow-popups，window.open 一定返回 null，
+ *  所以有宿主 IPC 就用 IPC；没有就退回「复制链接」而不是静默失败。 */
+async function openExternal(url) {
+  if (state.caps && state.caps.can_open_url === true) {
+    try {
+      await hostInvoke('open_external_url', { url });
+      return true;
+    } catch (_) { /* 落到复制 */ }
+  }
+  const ok = await copyText(url);
+  toast(ok ? '已复制链接（本版宿主不能直接打开浏览器）' : '请手动复制链接', !ok);
   return false;
 }
 
@@ -188,9 +225,35 @@ async function refreshInstalled() {
   try {
     const list = await hostInvoke('get_custom_plugins');
     state.installed = new Set((list || []).map((p) => p.id));
+    state.installedMeta = {};
+    for (const p of list || []) {
+      state.installedMeta[p.id] = { plugin_type: p.plugin_type, enabled: p.enabled };
+    }
     state.hostInfo = { hasBridge: true, error: null, count: (list || []).length };
   } catch (e) {
     state.hostInfo = { hasBridge: false, error: String((e && e.message) || e).slice(0, 120) };
+  }
+}
+
+/** 探测宿主能力位。命令不存在 ⇒ caps 保持 null ⇒ UI 退回「复制命令」交接模式。
+ *  这里的关键是**不按版本号猜**：老宿主报的版本号与新宿主一样，但一个安装接口都没有。 */
+async function probeCapabilities() {
+  try {
+    const raw = await hostInvoke('get_plugin_host_capabilities');
+    if (!raw || typeof raw !== 'object') { state.caps = null; return; }
+    state.caps = {
+      host_version: raw.host_version || raw.version || null,
+      can_install: raw.can_install === true,
+      can_uninstall: raw.can_uninstall === true,
+      can_reload: raw.can_reload === true,
+      can_open_url: raw.can_open_url === true,
+      can_write_clipboard: raw.can_write_clipboard === true,
+      can_read_manifest: raw.can_read_manifest === true,
+      can_manage_service: raw.can_manage_service === true,
+    };
+  } catch (_) {
+    // 老宿主没有这条命令（或桥断了）—— 两种都是「不能一键装」，UI 表现一致
+    state.caps = null;
   }
 }
 
@@ -248,6 +311,8 @@ function normalizeCatalog(raw, source) {
     stars: typeof p.stars === 'number' ? p.stars : null,
     updatedAt: p.updatedAt || null,
     license: p.license || null,
+    // 可选：可验证安装的完整性指纹。有就透传给宿主，没有就不传 —— 绝不编造。
+    sha256: /^[0-9a-f]{64}$/.test(p.sha256 || '') ? p.sha256 : null,
     unreviewed: p.unreviewed !== false,
     capabilities: Array.isArray(p.capabilities) ? p.capabilities : (p.capabilities === null ? null : undefined),
     topics: p.topics || [],
@@ -338,11 +403,9 @@ async function searchTopicLive() {
   }
 }
 
-/* --------------------------------------------------------- install command */
-function shellQuote(s) { return `"${String(s).replace(/"/g, '\\"')}"`; }
+/* ----------------------------------------------------------------- install */
 
-/** 生成 PowerShell 安装命令。
- *  宿主没有安装 IPC，所以这里只生成「用户在终端里粘一次」的命令；
+/** 生成 PowerShell 安装命令 —— 仅在宿主没有安装 IPC 时使用（老宿主交接路径）。
  *  repo 根目录就是插件时直接 clone 到位，子目录 / monorepo 时 clone 到临时目录再搬。 */
 function installCommand(entry) {
   const pluginDir = '%APPDATA%\\OpenRevo\\plugins';
@@ -360,7 +423,6 @@ function installCommand(entry) {
   }
 
   const sub = entry.subpath.replace(/\\/g, '/');
-  const leaf = sub.split('/').pop();
   return [
     `$t = Join-Path $env:TEMP ("orv-" + [guid]::NewGuid().ToString("N"))`,
     `git clone --depth 1 --branch ${branch} ${url} $t`,
@@ -372,11 +434,122 @@ function installCommand(entry) {
   ].join('; ');
 }
 
-function zipUrl(entry) {
-  if (!entry.subpath) {
-    return `https://codeload.github.com/${entry.repo}/zip/refs/heads/${entry.branch || 'main'}`;
+/** 宿主安装器吃的归档地址。必须是 https —— 宿主硬性拒绝 http 与 file。 */
+function archiveUrl(entry) {
+  const branch = entry.branch || 'main';
+  return `https://codeload.github.com/${entry.repo}/zip/refs/heads/${encodeURIComponent(branch)}`;
+}
+
+/** 人看的源码/子目录地址（用于「在浏览器打开」）。 */
+function repoUrl(entry) {
+  const branch = entry.branch || 'main';
+  if (!entry.subpath) return `https://github.com/${entry.repo}`;
+  return `https://github.com/${entry.repo}/tree/${branch}/${entry.subpath}`;
+}
+
+function canOneClick() {
+  return !!(state.caps && state.caps.can_install === true);
+}
+
+/** 一键安装：把下载/校验/解压/落盘/热重载全部交给宿主，市场只发一条 IPC。
+ *  这是宿主自己实现的安装器（强制 https、可选 sha256、防 Zip Slip、AppData 边界断言）。 */
+async function installEntry(entry) {
+  if (!canOneClick()) throw new Error('本版宿主没有开放安装接口');
+  if (state.busy) throw new Error('已有安装任务在进行');
+
+  state.busy = entry.id;
+  render();
+
+  try {
+    const args = { url: archiveUrl(entry) };
+    if (entry.subpath) args.subpath = entry.subpath;
+    if (entry.sha256) args.sha256 = entry.sha256;
+
+    const result = await hostInvoke('install_plugin_from_url', args);
+
+    // 装完立刻重扫，让「已安装」状态与宿主真实目录一致
+    await reloadPlugins(true);
+    await refreshInstalled();
+
+    const name = (result && (result.id || result.name)) || entry.id;
+    toast(`已安装 ${name}`);
+    return result;
+  } finally {
+    state.busy = null;
+    render();
   }
-  return `https://github.com/${entry.repo}/tree/${entry.branch || 'main'}/${entry.subpath}`;
+}
+
+async function uninstallEntry(entry) {
+  if (!(state.caps && state.caps.can_uninstall === true)) {
+    throw new Error('本版宿主没有开放卸载接口');
+  }
+  state.busy = entry.id;
+  render();
+  try {
+    await hostInvoke('uninstall_plugin', { pluginId: entry.id });
+    await reloadPlugins(true);
+    await refreshInstalled();
+    toast(`已卸载 ${entry.id}（已移入回收站，可恢复）`);
+  } finally {
+    state.busy = null;
+    render();
+  }
+}
+
+/** 重扫插件目录。宿主支持就发 IPC；不支持则退回 get_custom_plugins（只读枚举）。 */
+async function reloadPlugins(silent) {
+  if (state.caps && state.caps.can_reload === true) {
+    try {
+      const list = await hostInvoke('reload_plugins');
+      if (Array.isArray(list)) return list;
+    } catch (e) {
+      if (!silent) toast('重载失败：' + shortErr(e), true);
+    }
+  }
+  try {
+    return await hostInvoke('get_custom_plugins');
+  } catch (_) {
+    return null;
+  }
+}
+
+function shortErr(e) {
+  const s = String((e && (e.message || e)) || e);
+  return s.replace(/^Error:\s*/, '').slice(0, 160);
+}
+
+/** 读已安装插件的 manifest 原文，与目录里的版本比对，标出「可更新」。
+ *  只在宿主声明 can_read_manifest 时做，避免对老宿主发无效 IPC。 */
+async function readInstalledVersions() {
+  if (!(state.caps && state.caps.can_read_manifest === true)) return;
+  const ids = Array.from(state.installed);
+  const updates = {};
+  await Promise.all(ids.map(async (id) => {
+    try {
+      const m = await hostInvoke('get_plugin_manifest', { pluginId: id });
+      if (m && typeof m === 'object' && m.version) updates[id] = m.version;
+    } catch (_) { /* 单个插件读失败不影响其它 */ }
+  }));
+  state.installedMeta = state.installedMeta || {};
+  for (const [id, v] of Object.entries(updates)) {
+    state.installedMeta[id] = { ...(state.installedMeta[id] || {}), version: v };
+  }
+  render();
+}
+
+/** 判断已装版本落后于目录版本。版本号比不出来就返回 false —— 不猜。 */
+function hasUpdate(entry) {
+  const meta = state.installedMeta && state.installedMeta[entry.id];
+  if (!meta || !meta.version || !entry.version) return false;
+  const a = String(meta.version).split('.').map((x) => parseInt(x, 10) || 0);
+  const b = String(entry.version).split('.').map((x) => parseInt(x, 10) || 0);
+  for (let i = 0; i < Math.max(a.length, b.length); i += 1) {
+    const x = a[i] || 0;
+    const y = b[i] || 0;
+    if (x !== y) return y > x;
+  }
+  return false;
 }
 
 /* ------------------------------------------------------------------ render */
@@ -462,6 +635,8 @@ function capabilityBlock(entry) {
 
 function card(entry) {
   const isInst = state.installed.has(entry.id);
+  const isBusy = state.busy === entry.id;
+  const upd = hasUpdate(entry);
   const tname = TYPE_LABEL[entry.plugin_type] || entry.plugin_type;
   const rel = relTime(entry.updatedAt);
   const stars = entry.stars === null || entry.stars === undefined
@@ -471,6 +646,7 @@ function card(entry) {
     badge(`type-${entry.plugin_type}`, tname, I.tag),
     entry.version ? badge('', 'v' + entry.version) : '',
     isInst ? badge('ok', '已安装', I.check) : '',
+    upd ? badge('warn', '可更新', I.refresh) : '',
     entry.unreviewed ? badge('warn', '未审核', I.alert) : badge('info', '已审核', I.shield),
     entry.commit ? badge('', entry.commit.slice(0, 7)) : '',
   ].filter(Boolean).join('');
@@ -479,8 +655,14 @@ function card(entry) {
     ? `<div class="mkt-card-desc">${esc(entry.description)}</div>`
     : `<div class="mkt-card-desc empty">作者未填写描述。安装前请自行阅读源码。</div>`;
 
+  const oneClick = canOneClick();
+  const mainLabel = isBusy
+    ? `${I.refresh}处理中…`
+    : (upd ? `${I.refresh}更新` : (isInst ? `${I.check}重装` : `${I.down}安装`));
+  const mainCls = isBusy ? '' : (isInst && !upd ? '' : 'primary');
+
   return `
-    <div class="mkt-card${isInst ? ' installed' : ''}" data-id="${esc(entry.id)}">
+    <div class="mkt-card${isInst ? ' installed' : ''}${isBusy ? ' busy' : ''}" data-id="${esc(entry.id)}">
       <div class="mkt-card-head">
         <div class="mkt-avatar" style="display:flex;align-items:center;justify-content:center;color:var(--text-dim)">${I.box}</div>
         <div class="mkt-card-titles">
@@ -496,10 +678,14 @@ function card(entry) {
         <span class="mkt-card-stat">${esc(entry.author || '未知作者')}</span>
         ${rel ? `<span class="mkt-card-stat">· ${esc(rel)}</span>` : ''}
         <span class="spacer"></span>
-        <button class="mkt-btn sm ${isInst ? '' : 'primary'}" data-act="install" data-id="${esc(entry.id)}">
-          ${isInst ? I.check + '重装' : I.down + '安装'}
+        ${isInst ? `<button class="mkt-btn sm danger" data-act="uninstall" data-id="${esc(entry.id)}"
+          ${state.busy || !state.caps || !state.caps.can_uninstall ? 'disabled' : ''}
+          title="${state.caps && state.caps.can_uninstall ? '移入回收站并清理配置' : '本版宿主没有开放卸载接口'}">${I.x}卸载</button>` : ''}
+        <button class="mkt-btn sm ${mainCls}" data-act="install" data-id="${esc(entry.id)}" ${state.busy ? 'disabled' : ''}>
+          ${mainLabel}
         </button>
       </div>
+      ${oneClick ? '' : `<div class="mkt-card-hint">${I.info}本版宿主没有安装接口 —— 点【安装】会给出可粘贴的命令。</div>`}
     </div>`;
 }
 
@@ -552,6 +738,10 @@ function metaLine() {
   const bridge = state.hostInfo && state.hostInfo.hasBridge
     ? `宿主桥已连接 · 已装 ${state.installed.size} 个`
     : '宿主桥不可用（无法识别已安装）';
+  // 能力行如实反映探测结果：没探测到就是「未开放」，不按版本号编造
+  const capsLine = canOneClick()
+    ? `宿主 ${state.caps.host_version || ''} · 支持一键安装`.replace(/\s+/g, ' ').trim()
+    : `宿主 ${(state.caps && state.caps.host_version) || ''} 未开放安装接口 · 仅给命令`.replace(/\s+/g, ' ').trim();
 
   return `
     <div class="mkt-meta">
@@ -559,6 +749,7 @@ function metaLine() {
       <span>${esc(note)}</span>
       ${gen ? `<span>· 目录更新于 ${esc(gen)}</span>` : ''}
       <span>· ${esc(bridge)}</span>
+      <span>· ${esc(capsLine)}</span>
       <span class="spacer"></span>
       <code>topic:${esc(CONFIG.topic)}</code>
     </div>`;
@@ -572,7 +763,7 @@ function emptyBlock() {
   }
   if (state.typeFilter === '__installed__') {
     return `<div class="mkt-empty">${I.box}<div class="t">还没有安装任何第三方插件</div>
-      <div class="d">切到「全部」，挑一个装上。装完回到宿主「插件」页点一次刷新即可生效。</div></div>`;
+      <div class="d">切到「全部」，挑一个装上。${canOneClick() ? '装完由宿主自动重载，无需重启。' : '装完回到宿主「插件」页点一次刷新即可生效。'}</div></div>`;
   }
   return `<div class="mkt-empty">${I.box}<div class="t">市场里还没有插件</div>
     <div class="d">给插件仓库打上 <code>${esc(CONFIG.topic)}</code> topic，它就会在下次爬取后自动出现在这里；
@@ -655,18 +846,80 @@ function bind() {
   });
 
   document.querySelectorAll('[data-act]').forEach((el) => {
-    el.addEventListener('click', () => {
+    el.addEventListener('click', (e) => {
       const act = el.getAttribute('data-act');
       const id = el.getAttribute('data-id');
-      if (act === 'refresh') fetchCatalog();
-      else if (act === 'open-dir') openPluginsDir();
-      else if (act === 'live') searchTopicLive();
-      else if (act === 'install') {
-        const entry = currentList().find((p) => p.id === id);
-        if (entry) openInstallModal(entry);
+      if (act === 'refresh') { refreshAll(); return; }
+      if (act === 'open-dir') { openPluginsDir(); return; }
+      if (act === 'live') { searchTopicLive(); return; }
+
+      const entry = id ? currentList().find((p) => p.id === id) : null;
+      if (!entry) return;
+
+      // 安装一律走弹窗：它本身就是一个确认步骤，而且不依赖 window.confirm。
+      // tab iframe 的 sandbox 没有 allow-modals，confirm() 会被静默拦掉并返回 false，
+      // 用原生确认框装 = 点了没反应。
+      if (act === 'install') openInstallModal(entry);
+      else if (act === 'uninstall') openUninstallModal(entry);
+    });
+  });
+}
+
+/** 卸载确认。同样不用 window.confirm（沙盒里没有 allow-modals）。 */
+function openUninstallModal(entry) {
+  const scrim = document.createElement('div');
+  scrim.className = 'mkt-scrim';
+  scrim.innerHTML = `
+    <div class="mkt-modal" role="dialog" aria-label="卸载插件">
+      <div class="mkt-modal-head">
+        <div class="mkt-avatar" style="display:flex;align-items:center;justify-content:center;color:var(--text-dim)">${I.box}</div>
+        <div style="flex:1;min-width:0">
+          <div class="t">卸载「${esc(entry.name && entry.name !== entry.id ? entry.name : entry.id)}」</div>
+          <div class="s">${esc(entry.id)}</div>
+        </div>
+        <button class="mkt-btn sm" data-close="1" title="关闭">${I.x}</button>
+      </div>
+      <div class="mkt-modal-body">
+        <div class="mkt-note">
+          ${I.alert}
+          <span>插件目录会被<b>移入系统回收站</b>（可恢复），同时从配置中清理它的开关与激活状态。
+          正在运行的伴随服务会先被停止。</span>
+        </div>
+      </div>
+      <div class="mkt-modal-foot">
+        <button class="mkt-btn" data-close="1">取消</button>
+        <span class="spacer"></span>
+        <button class="mkt-btn danger" data-act2="uninstall-now">${I.x}确认卸载</button>
+      </div>
+    </div>`;
+  document.body.appendChild(scrim);
+
+  const close = () => scrim.remove();
+  scrim.addEventListener('click', (e) => { if (e.target === scrim) close(); });
+  scrim.querySelectorAll('[data-close]').forEach((el) => el.addEventListener('click', close));
+  scrim.querySelectorAll('[data-act2="uninstall-now"]').forEach((el) => {
+    el.addEventListener('click', async () => {
+      el.disabled = true;
+      try {
+        await uninstallEntry(entry);
+        close();
+      } catch (e) {
+        toast('卸载失败：' + shortErr(e), true);
+        el.disabled = false;
       }
     });
   });
+  const onKey = (e) => { if (e.key === 'Escape') { close(); document.removeEventListener('keydown', onKey); } };
+  document.addEventListener('keydown', onKey);
+}
+
+/** 手动刷新：目录 + 已安装 + 能力位一起重取。 */
+async function refreshAll() {
+  await probeCapabilities();
+  await refreshInstalled();
+  render();
+  await fetchCatalog();
+  readInstalledVersions();
 }
 
 async function openPluginsDir() {
@@ -679,11 +932,14 @@ async function openPluginsDir() {
 }
 
 /* ------------------------------------------------------------------- modal */
+/** 安装弹窗。宿主支持一键装时走「确认 + 直接装」；否则走「复制命令」的交接模式。
+ *  两条路径共用同一张卡片，靠 canOneClick() 切换，不给用户两套心智模型。 */
 function openInstallModal(entry) {
   const cmd = installCommand(entry);
   const isInst = state.installed.has(entry.id);
   const tname = TYPE_LABEL[entry.plugin_type] || entry.plugin_type;
   const branch = entry.branch || 'main';
+  const oneClick = canOneClick();
 
   const scrim = document.createElement('div');
   scrim.className = 'mkt-scrim';
@@ -708,9 +964,27 @@ function openInstallModal(entry) {
           ${isInst ? badge('ok', '已安装 · 将被覆盖', I.check) : ''}
         </div>
 
+        ${oneClick ? `
+        <div class="mkt-note plain">
+          ${I.shield}
+          <span>宿主会自己完成下载与落盘：<b>强制 HTTPS</b>、解压时校验路径边界（防 Zip Slip）、
+          安装目录限制在 OpenRevo 的 AppData 下，装完自动重扫。
+          插件是第三方代码，会以你的权限运行 —— 请只安装你信任的来源。</span>
+        </div>
+        <div class="mkt-block">
+          <div class="h">安全提示</div>
+          <div class="mkt-steps">
+            <div class="mkt-step"><div class="tx">本操作会把 <code>${esc(entry.repo)}</code>${
+              entry.subpath ? ` 的 <code>${esc(entry.subpath)}</code> 子目录` : ' 的仓库根'
+            }写入 <code>%APPDATA%\\OpenRevo\\plugins\\${esc(entry.id)}\\</code>，同名目录会被覆盖。</div></div>
+            <div class="mkt-step"><div class="tx">${entry.sha256
+              ? '目录里提供了 <b>sha256</b>，宿主会在安装前校验归档指纹 —— 内容被替换会被拒绝。'
+              : '目录条目<b>没有提供 sha256</b>，宿主只能校验传输完整性，不能证明内容未被篡改。'}</div></div>
+          </div>
+        </div>` : `
         <div class="mkt-note">
           ${I.alert}
-          <span><b>本版宿主（v0.9.1）没有开放安装接口</b>，插件目录也没有文件写入 IPC，
+          <span><b>本版宿主没有开放安装接口</b>（<code>get_plugin_host_capabilities</code> 不可用或 <code>can_install=false</code>），
           因此市场不能替你完成下载。下面的命令是市场能给出的最短路径：复制它、在终端粘一次即可。</span>
         </div>
 
@@ -730,28 +1004,50 @@ function openInstallModal(entry) {
         <div class="mkt-block">
           <div class="h">安装命令（PowerShell）</div>
           <div class="mkt-cmd">${I.copy}<code id="cmd">${esc(cmd)}</code></div>
-        </div>
+        </div>`}
 
         <div class="mkt-block">
           <div class="h">能力披露</div>
           ${capabilityBlock(entry)}
         </div>
 
+        ${oneClick ? `
+        <details class="mkt-fallback">
+          <summary>${I.info}一键安装失败？手动安装（备用）</summary>
+          <div class="mkt-block">
+            <div class="mkt-cmd">${I.copy}<code id="cmd">${esc(cmd)}</code></div>
+          </div>
+          <div class="mkt-note plain">
+            ${I.info}
+            <span>也可以直接下载归档，解压后把${
+              entry.subpath ? `其中的 <code>${esc(entry.subpath)}</code> 目录` : '全部内容'
+            }放进 <code>plugins\\${esc(entry.id)}</code>。<br/>
+            <code style="word-break:break-all">${esc(repoUrl(entry))}</code></span>
+          </div>
+        </details>` : `
+        <div class="mkt-block">
+          <div class="h">安装命令（PowerShell）</div>
+          <div class="mkt-cmd">${I.copy}<code id="cmd">${esc(cmd)}</code></div>
+        </div>
+
         <div class="mkt-note plain">
           ${I.info}
-          <span>手动下载也行：把下面的地址贴进浏览器，解压后把${
+          <span>也可以手动下载：把下面的地址贴进浏览器，解压后把${
             entry.subpath ? `其中的 <code>${esc(entry.subpath)}</code> 目录` : '全部内容'
           }放进 <code>plugins\\${esc(entry.id)}</code>。
-          <br/><code style="word-break:break-all">${esc(zipUrl(entry))}</code></span>
-        </div>
+          <br/><code style="word-break:break-all">${esc(repoUrl(entry))}</code></span>
+        </div>`}
       </div>
 
       <div class="mkt-modal-foot">
         <button class="mkt-btn" data-close="1">关闭</button>
-        <button class="mkt-btn" data-act2="copy-url">复制下载地址</button>
+        <button class="mkt-btn" data-act2="open-repo">${I.tag}打开源码</button>
+        <button class="mkt-btn" data-act2="copy-cmd">${I.copy}复制命令</button>
         <span class="spacer"></span>
         <button class="mkt-btn" data-act2="open-dir">${I.folder}打开插件目录</button>
-        <button class="mkt-btn primary" data-act2="copy-cmd">${I.copy}复制安装命令</button>
+        ${oneClick
+          ? `<button class="mkt-btn primary" data-act2="install-now">${I.down}${isInst ? '重新安装' : '立即安装'}</button>`
+          : ''}
       </div>
     </div>`;
 
@@ -767,12 +1063,20 @@ function openInstallModal(entry) {
       if (a === 'copy-cmd') {
         const ok = await copyText(cmd);
         toast(ok ? '安装命令已复制' : '复制被拦，请手动选中命令后按 Ctrl+C', !ok);
-      } else if (a === 'copy-url') {
-        const ok = await copyText(zipUrl(entry));
-        toast(ok ? '下载地址已复制' : '复制被拦，请手动抄写地址', !ok);
+      } else if (a === 'open-repo') {
+        openExternal(repoUrl(entry));
       } else if (a === 'open-dir') {
         try { await hostInvoke('open_plugins_dir'); toast('已打开插件目录'); }
         catch (_) { toast('无法打开插件目录：宿主桥不可用', true); }
+      } else if (a === 'install-now') {
+        el.disabled = true;
+        try {
+          await installEntry(entry);
+          close();
+        } catch (e) {
+          toast('安装失败：' + shortErr(e), true);
+          el.disabled = false;
+        }
       }
     });
   });
@@ -797,10 +1101,12 @@ async function init() {
   }
   render();
 
+  // 先探测能力再画按钮：能力位决定卡片上是「安装」还是「复制命令」。
+  await probeCapabilities();
   await refreshInstalled();
   render();
 
-  fetchCatalog();
+  fetchCatalog().then(() => readInstalledVersions());
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

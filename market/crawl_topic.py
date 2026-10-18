@@ -325,6 +325,10 @@ def merge(prev: dict, fresh: dict) -> dict:
                     p[f] = False          # 正典标记一旦落下，爬虫不得翻回未审核
                 elif old.get(f) is not None and old.get(f) != [] and p.get(f) in (None, ""):
                     p[f] = old[f]         # 爬虫没抓到，沿用人工写的
+            # sha256 是人工算好后写进目录的「可验证安装」凭据，爬虫抓不到也不能丢 ——
+            # 丢了就等于悄悄把安装从"可校验"降级成"仅传输完整"。
+            if old.get("sha256"):
+                p["sha256"] = old["sha256"]
         out.append(p)
 
     # 人工加进 catalog 但不在 topic 结果里的条目（比如自建 CDN 托管）也保留

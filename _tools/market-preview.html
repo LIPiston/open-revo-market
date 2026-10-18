@@ -48,21 +48,42 @@ if (!SHOW_DIAG) {
 }
 
 const CALLS = [];
+// ?host=old 模拟没有安装接口的老宿主（0.9.1）：get_plugin_host_capabilities 直接 reject。
+// 默认模拟新宿主：能力位齐全、安装/卸载/重载都返回成功。
+const HOST_MODE = params.get('host') || 'new';
+const INSTALLED = [
+  { id: 'bg-custom', plugin_type: 'skin', enabled: false },
+  { id: 'plugin-market', plugin_type: 'tab', enabled: true },
+];
+
 window.__TAURI_INTERNALS__ = {
   invoke: async (cmd, args) => {
     CALLS.push([cmd, args]);
-    if (cmd === 'get_custom_plugins') {
-      // 模拟：仓库自带的 2 个插件都已安装，市场应认出「已安装」
-      return [
-        { id: 'bg-custom', plugin_type: 'skin', enabled: false },
-        { id: 'plugin-market', plugin_type: 'tab', enabled: true },
-      ];
+    if (cmd === 'get_plugin_host_capabilities') {
+      if (HOST_MODE === 'old') throw new Error('command get_plugin_host_capabilities not found');
+      return {
+        host_version: '0.10.0', tauri_version: '2.0.0',
+        can_install: true, can_uninstall: true, can_reload: true,
+        can_open_url: true, can_write_clipboard: true,
+        can_read_manifest: true, can_manage_service: true,
+      };
     }
+    if (cmd === 'get_custom_plugins') return INSTALLED;
+    if (cmd === 'reload_plugins') return INSTALLED;
     if (cmd === 'open_plugins_dir') return 'opened';
+    if (cmd === 'install_plugin_from_url') return { id: 'mock-installed' };
+    if (cmd === 'uninstall_plugin') return true;
+    if (cmd === 'get_plugin_manifest') return { id: 'bg-custom', version: '1.0.0' };
+    if (cmd === 'write_clipboard' || cmd === 'open_external_url') return true;
     return { ok: true, cmd };
   },
 };
 window.__OPENREVO_BRIDGE__ = { invoke: window.__TAURI_INTERNALS__.invoke };
+
+// 安装/卸载前都会 confirm，headless 里没法点 —— 预览放行但记下来，
+// 好让验收脚本确认「确认闸真的走过」，而不是被绕开。
+window.__CONFIRMS__ = [];
+window.confirm = (msg) => { window.__CONFIRMS__.push(String(msg).slice(0, 60)); return true; };
 
 const diag = document.getElementById('diag');
 const errors = [];
@@ -140,33 +161,77 @@ window.__PROBE__ = () => ({
   snap: snapshot(),
 });
 
-/* 额外演练：点开安装弹窗，确认它能渲染、能给出命令、复制按钮有反馈。
- * 这是市场最重要的一条交互路径，必须在闸里跑到。 */
-function exerciseModal() {
+/* 额外演练：点【安装】。宿主能力不同，走的路径不同，两条都要跑：
+ *   new  → 弹确认窗，点【立即安装】后真正发 install_plugin_from_url
+ *   old  → 弹同一张窗，但给的是可粘贴的 PowerShell 命令
+ * 注意：tab iframe 的 sandbox 没有 allow-modals，所以市场**不能**用 window.confirm ——
+ * 验收必须验证这一点，否则真实宿主里会出现「点了没反应」。 */
+async function exerciseInstall() {
   const w = f.contentWindow;
   const d = w.document;
   const btn = d.querySelector('[data-act="install"]');
-  if (!btn) return { modal: 'no install button' };
+  if (!btn) return { install: 'no install button' };
+
+  const mode = HOST_MODE === 'old' ? 'legacy' : 'oneclick';
   btn.click();
   const scrim = d.querySelector('.mkt-scrim');
-  if (!scrim) return { modal: 'click did not open modal' };
-  const cmdEl = scrim.querySelector('#cmd');
-  const steps = scrim.querySelectorAll('.mkt-step').length;
-  const footBtns = Array.from(scrim.querySelectorAll('[data-act2]')).map((b) => b.getAttribute('data-act2'));
+  if (!scrim) return { install: 'click did not open modal', mode };
+
+  if (mode === 'legacy') {
+    const cmdEl = scrim.querySelector('#cmd');
+    return {
+      install: 'modal-open', mode,
+      hasCmd: !!(cmdEl && cmdEl.textContent.includes('plugins')),
+      cmdHead: cmdEl ? cmdEl.textContent.slice(0, 110) : null,
+      discItems: scrim.querySelectorAll('.mkt-disc-item').length,
+      footBtns: Array.from(scrim.querySelectorAll('[data-act2]')).map((b) => b.getAttribute('data-act2')),
+      steps: scrim.querySelectorAll('.mkt-step').length,
+    };
+  }
+
+  // oneclick：点【立即安装】，确认真的发出 IPC
+  const before = CALLS.length;
+  const go = scrim.querySelector('[data-act2="install-now"]');
+  if (!go) return { install: 'no install-now button', mode };
+  go.click();
+  await new Promise((r) => setTimeout(r, 600));
+  const callsSince = CALLS.slice(before).map((c) => c[0]);
   return {
-    modal: 'open',
-    steps,
-    hasCmd: !!(cmdEl && cmdEl.textContent.includes('plugins')),
-    cmdHead: cmdEl ? cmdEl.textContent.slice(0, 110) : null,
-    discItems: scrim.querySelectorAll('.mkt-disc-item').length,
-    footBtns,
-    warnings: scrim.querySelectorAll('.mkt-note').length,
+    install: 'confirmed', mode,
+    invoked: callsSince.includes('install_plugin_from_url'),
+    reloaded: callsSince.includes('reload_plugins'),
+    // 沙盒里 window.confirm 会被拦并返回 false —— 市场不该依赖它
+    usedNativeConfirm: window.__CONFIRMS__.length > 0,
   };
 }
 
-// ?modal=1：自动打开安装弹窗，供出图
+/** 卸载也演练一次：确认走 uninstall_plugin 且带对 pluginId。 */
+async function exerciseUninstall() {
+  const w = f.contentWindow;
+  const d = w.document;
+  const btn = d.querySelector('[data-act="uninstall"]');
+  if (!btn) return { uninstall: 'no button' };
+  if (btn.disabled) return { uninstall: 'disabled', mode: HOST_MODE };
+
+  btn.click();
+  const scrim = d.querySelector('.mkt-scrim');
+  if (!scrim) return { uninstall: 'no modal' };
+  const go = scrim.querySelector('[data-act2="uninstall-now"]');
+  if (!go) return { uninstall: 'no confirm button' };
+
+  const before = CALLS.length;
+  go.click();
+  await new Promise((r) => setTimeout(r, 600));
+  const calls = CALLS.slice(before).filter((c) => c[0] === 'uninstall_plugin');
+  return {
+    uninstall: calls.length ? 'invoked' : 'not-invoked',
+    pluginId: calls.length ? (calls[0][1] || {}).pluginId : null,
+  };
+}
+
+// ?modal=1：自动打开安装弹窗，供出图（仅老宿主模式有弹窗）
 if (params.get('modal') === '1') {
-  setTimeout(() => { try { exerciseModal(); } catch (_) {} }, 2600);
+  setTimeout(() => { try { exerciseInstall(); } catch (_) {} }, 2600);
 }
 
 /* 再演练：点一次「实时发现」（打 api.github.com）。
@@ -188,8 +253,10 @@ async function exerciseLive() {
 
 setTimeout(async () => {
   const s = snapshot();
-  let modal = null;
-  try { modal = exerciseModal(); } catch (e) { modal = { modal: 'threw: ' + e.message }; }
+  let install = null;
+  try { install = await exerciseInstall(); } catch (e) { install = { install: 'threw: ' + e.message }; }
+  let uninst = null;
+  try { uninst = await exerciseUninstall(); } catch (e) { uninst = { uninstall: 'threw: ' + e.message }; }
   let live = null;
   try { live = await exerciseLive(); } catch (e) { live = { live: 'threw: ' + e.message }; }
 
@@ -200,12 +267,24 @@ setTimeout(async () => {
   const sat = rgb ? (Math.max(...rgb) - Math.min(...rgb)) / Math.max(...rgb) : null;
   const themeOk = THEME === 'mono' ? (sat !== null && sat < 0.12) : true;
 
+  // 两条宿主路径的成功判据不同，但都必须成立：
+  //   oneclick → 弹确认窗 → 点【立即安装】→ 真发 install_plugin_from_url（并重扫）
+  //   legacy   → 弹窗并给出含 plugins 路径的可粘贴命令
+  // 两条都不许依赖 window.confirm：沙盒没有 allow-modals，原生确认框会静默返回 false。
+  const installOk = install && (
+    (install.mode === 'oneclick'
+      && install.install === 'confirmed'
+      && install.invoked
+      && install.usedNativeConfirm === false)
+    || (install.mode === 'legacy' && install.install === 'modal-open' && install.hasCmd)
+  );
+
   const ok = s.ready && s.cards > 0 && errors.length === 0
-    && modal && modal.modal === 'open' && themeOk && live && live.live === 'clicked';
+    && installOk && themeOk && live && live.live === 'clicked';
 
   diag.className = ok ? 'ok' : 'err';
   diag.textContent = JSON.stringify({
-    ready: s.ready, cards: s.cards, errors, modal, live,
+    host: HOST_MODE, ready: s.ready, cards: s.cards, errors, install, uninstall: uninst, live,
     calls: [...new Set(CALLS.map(c => c[0]))], sources: s.sources, badges: s.badges,
     installedBadges: s.installedBadges, filterLabels: s.filterLabels,
     meta: (s.meta || '').replace(/\s+/g, ' ').trim(),

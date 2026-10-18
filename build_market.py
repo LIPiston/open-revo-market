@@ -27,9 +27,9 @@ PLUGIN_ID = "plugin-market"
 MANIFEST = {
     "id": PLUGIN_ID,
     "name": "插件市场",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "author": "LIPiston",
-    "description": "浏览 GitHub 上带 openrevo-plugin topic 的第三方插件，查看能力披露，并给出最短安装路径。",
+    "description": "浏览 GitHub 上带 openrevo-plugin topic 的第三方插件，宿主支持时一键安装/卸载。",
     "plugin_type": "tab",
     "entry": "index.html",
 }
@@ -114,6 +114,24 @@ def sanity_checks(html: str) -> list[str]:
 
     if 'plugin_type' not in read(SRC / "market.js"):
         problems.append("未使用 plugin_type —— v0.9.1 的权威键是 plugin_type")
+
+    # 能力探测必须在，而且不能按版本号猜 —— 老宿主报的版本号和新宿主一样
+    js_src = read(SRC / "market.js")
+    if "get_plugin_host_capabilities" not in js_src:
+        problems.append("没有调用 get_plugin_host_capabilities，无法按宿主能力降级")
+    for cap in ("can_install", "can_uninstall", "can_reload"):
+        if cap not in js_src:
+            problems.append(f"没有使用能力位 {cap}")
+
+    # 安装/卸载参数名必须与宿主命令表逐字一致，写错就是运行时 no-op
+    if "pluginId" not in js_src:
+        problems.append("uninstall_plugin 的参数名必须是 pluginId（宿主 serde 字段）")
+    if re.search(r"expectedSha256", js_src):
+        problems.append("install_plugin_from_url 的参数是 sha256，不是 expectedSha256")
+
+    # 绝不能把「本版宿主没有安装接口」这类判断写死成版本号
+    if re.search(r"v?0\.9\.1[^0-9]", js_src):
+        problems.append("market.js 里仍硬编码宿主版本号 —— 能力必须运行时探测")
 
     return problems
 
