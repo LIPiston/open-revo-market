@@ -77,7 +77,17 @@ python build_skins.py --install  # 生成并安装到 %APPDATA%\OpenRevo\plugins
 > 既能读 `window.parent.document`，也能拿 `window.parent.__TAURI_INTERNALS__.invoke`。
 > **绝不**把「跑在 iframe 里」当安全边界，也不要在 UI 上写「安全隔离」。
 
-### 1.2 宿主**有**的插件命令（13 条，全部）
+### 1.2 插件命令：**分两代宿主，能力差别很大**
+
+两代 exe 的 `ProductVersion` **都是 0.9.1**，版本号字符串无法区分。只能看体积 + 运行时探测：
+
+| | 老宿主 | 新宿主 |
+|---|---|---|
+| 体积 / sha256 | 9,368,576 B · `85ce81fb…` | 9,437,696 B · `796b75e0…` |
+| 插件命令 | 下面这 13 条 | 13 条 + 整族安装/生命周期 IPC |
+| 判定方式 | `get_plugin_host_capabilities` **调用即抛错** | 该命令返回 `host_version` + `can_*` |
+
+老宿主（基线，`market-host-constraints.md` 记录的就是它）**只有**这 13 条：
 
 ```
 get_custom_plugins          load_plugin_html            load_plugin_theme_css
@@ -87,9 +97,19 @@ set_active_skin             get_active_skin             set_active_background
 get_active_background
 ```
 
-宿主全部 IPC 共 **132 个唯一命令**（从 0.9.1 前端 `x("…")` 抽取）。**与插件相关的只有上表这 13 条**，
-没有一条能：下载 / 写盘 / 删除插件 / 重载目录 / 开外链 / 读任意文件 / 读宿主版本。
-缺失接口的完整清单与建议签名见 `market-host-constraints.md` §3 与桌面文档《OpenRevo 插件市场-宿主缺失接口清单》。
+新宿主在这之外新增（逐字取自 exe 命令注册表，详见 `reference/host-plugin-ipc.md`）：
+
+```
+install_plugin_from_url { url, subpath?, sha256? }   uninstall_plugin { pluginId }
+reload_plugins { }                                   get_plugin_manifest { pluginId }
+set_plugin_enabled_unified { pluginId, enabled }     get_plugin_host_capabilities { }
+open_external_url { url }                            write_clipboard { text }
+start_plugin_service / stop_plugin_service / get_plugin_service_status { pluginId }
+```
+
+**插件代码绝不能按版本号分支** —— 两代报同一个版本号。正确做法是探测
+`get_plugin_host_capabilities`，命令不存在就降级（市场就是这么做的）。
+`restart_plugin_service` **不存在**（0 命中），重启只能 stop + start。
 
 ---
 
@@ -227,17 +247,21 @@ docs\
     ├── preview-and-audit.md              # 预览页能力与 URL 参数、无头 Chrome、像素判据
     ├── real-machine-verification.md      # 提权重启/唤醒/置顶抓图/度量与实测基线
     ├── environment-and-tools.md          # 环境硬事实 + 工具地图 + 证据索引 + 回退清单
-    ├── market-host-constraints.md        # 市场为什么长这样：0.9.1 tab 契约 / 无安装 IPC 取证
+    ├── market-host-constraints.md        # 老宿主的 tab 契约（无安装 IPC）—— 已被新宿主部分推翻，见页首横幅
+    ├── host-plugin-ipc.md                # 新宿主新增的插件 IPC：安装/卸载/能力位（9,437,696 B 实测）
     └── pitfalls.md                       # 踩坑总表：现象 → 原因 → 对策
 ```
 
-## 6. 现状快照（2026-10-17）
+## 6. 现状快照（2026-10-18）
 
-* 宿主 **0.9.1**；插件目录里**只有 `plugin-market`**；`active_skin` / `active_background` 均为 `null`。
+* 宿主已更新到 **9,437,696 B** 那一版（`ProductVersion` 仍报 0.9.1），**有安装 IPC**。
+  插件目录里只有 `plugin-market`；`active_skin` / `active_background` 均为 `null`。
 * **四套皮肤产物已删除**（仓库 + 宿主 config 残留），工具链保留（§0.1）。
-* 插件市场已交付并验收：`market-verify.sh cyber` 与 `mono` 双主题 PASS（cards=2、badges=8、0 JS 错误）。
+* 插件市场已升级并验收：`market-verify.sh cyber` 与 `mono` 各跑 **两代宿主 mock**，
+  四个组合全 PASS（0 JS 错误）。新宿主路径实跑
+  `get_plugin_host_capabilities → install_plugin_from_url → reload_plugins → uninstall_plugin`。
 * `market/catalog.json` 收录 2 条（`bg-custom`、`plugin-market`），爬虫 `CURATED` 同步收敛。
-* 宿主缺失接口清单已出（桌面《OpenRevo 插件市场-宿主缺失接口清单.md》）：市场真正用到的宿主 IPC 只有 2 个
-  （`get_custom_plugins`、`open_plugins_dir`），安装链路的接口一个都没有。
+* 一键安装的市场侧代码已就绪，但**归档包装目录与 `subpath` 的组合未在真机端到端验证** ——
+  所以一键安装弹窗里始终保留手动 `git clone` 备用路径（`reference/host-plugin-ipc.md` §3）。
 * 真机验证的边界：无法在真实宿主里驱动 CDP 抓图（`requireAdministrator` + 计划任务 `RunLevel=Highest`，
   且 9222 被用户 Chrome 占用）⇒ 上限是「等价沙盒 + 宿主目录枚举」。

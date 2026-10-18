@@ -190,7 +190,9 @@ open-revo-market\
 > 既能读 `window.parent.document`，也能拿 `window.parent.__TAURI_INTERNALS__.invoke`。
 > **绝不**把「跑在 iframe 里」当安全边界。
 
-### 4.3 宿主**有**的插件命令（13 条，全部）
+### 4.3 插件命令：分两代宿主
+
+两代 exe 的 `ProductVersion` **都是 0.9.1**，版本号无法区分能力。老宿主只有 13 条插件命令：
 
 ```
 get_custom_plugins          load_plugin_html            load_plugin_theme_css
@@ -200,10 +202,16 @@ set_active_skin             get_active_skin             set_active_background
 get_active_background
 ```
 
-宿主全部 IPC 共 **132 个唯一命令**，与插件相关的只有上表这 13 条。**没有一条能**：
-下载 / 写盘 / 删除插件 / 重载目录 / 开外链 / 读任意文件 / 读宿主版本。
+老宿主这 13 条里**没有一条能**：下载 / 写盘 / 删除插件 / 重载目录 / 开外链 / 读任意文件 / 读宿主版本。
 
-市场实际只用到其中 **2 个**：`get_custom_plugins`（只读）与 `open_plugins_dir`。
+新宿主（9,437,696 B）新增了整族市场与生命周期 IPC：`install_plugin_from_url`、`uninstall_plugin`、
+`reload_plugins`、`get_plugin_manifest`、`set_plugin_enabled_unified`、`get_plugin_host_capabilities`、
+`open_external_url`、`write_clipboard`、`start_plugin_service` / `stop_plugin_service`。
+完整签名与安装器的实际防线见 [`docs/reference/host-plugin-ipc.md`](docs/reference/host-plugin-ipc.md)。
+
+**所以插件代码绝不能按版本号分支** —— 只能运行时探测 `get_plugin_host_capabilities`，
+命令不存在就说明是老宿主、走降级路径。市场就是这么做的（§2.2）。另外
+`restart_plugin_service` **不存在**，重启只能 stop + start。
 
 ### 4.4 让宿主认到新插件
 
