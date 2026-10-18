@@ -712,3 +712,70 @@ j = async (S = !1) => { b(!0); try { const D = await m("get_custom_plugins") || 
 * `python market/validate_catalog.py market/catalog.json` → 2 条通过
 * `bash _tools/market-verify.sh cyber` / `mono` → 双 **PASS**（cards=2、badges=8、installed=2、0 JS 错误）
 * 已安装副本 `%APPDATA%\OpenRevo\plugins\plugin-market\` 与产物 `cmp` 三文件一致
+
+---
+
+## 18. 市场升级到可用状态：能力探测 + 一键安装（2026-10-18 第九轮）
+
+### 18.1 触发：宿主换了新 exe
+
+开发者发来两份文档（`openrevo-plugin-dev/SKILL.md` 与《OpenRevo 第三方插件开发手册》v1.0），
+都宣称宿主已有整族市场 IPC。起初按老 exe（9,368,576 B）核对，**全部 0 命中**；
+用户随后更新了宿主，新 exe **9,437,696 B**（sha256 `796b75e0ecc3adaa…`，mtime 17:03），
+再看命令注册表，`install_plugin_from_url` / `uninstall_plugin` / `reload_plugins` /
+`get_plugin_manifest` / `set_plugin_enabled_unified` / `open_external_url` / `write_clipboard` /
+`get_plugin_service_status` / `stop_plugin_service` / `start_plugin_service` **全部命中**。
+
+**两代 exe 的 `ProductVersion` 都是 0.9.1** —— 这直接否掉了「按版本号判断能力」的做法。
+
+### 18.2 三份文档与实测的出入（已写进 `reference/host-plugin-ipc.md`）
+
+| 文档说 | 实测 |
+|---|---|
+| `install_plugin_from_url({ url, expectedSha256 })` | 参数是 **`sha256`**，不是 `expectedSha256` |
+| `HostCapabilities { version, capabilities: string[] }` | 字段是 **`host_version` + 一组 `can_*` 布尔** |
+| 有 `restart_plugin_service` | **0 命中**，不在分发链里 ⇒ 只能 stop + start |
+| manifest 有 `permissions` 字段 | exe 里 `permissions` **0 命中**，不在字段表里 |
+| 零代码壁纸写 `"image": "wallpaper.png"` | 没有 `image` 字段；是**文件名嗅探**（12 个候选名） |
+| `service` 形态跑 Rhai 脚本 | Rhai 是给 BRFX 灯效用的；`on_startup_ceremony` / `lighting.welcome` 0 命中 |
+
+### 18.3 市场改了什么
+
+* **能力探测**：启动即调 `get_plugin_host_capabilities`，按 `can_install` / `can_uninstall` /
+  `can_reload` / `can_read_manifest` 决定 UI。命令不存在 ⇒ 全部降级，**不报错**。
+* **一键安装**：`install_plugin_from_url({ url: codeload 归档, subpath? , sha256? })`。
+  下载/校验/解压/落盘全在宿主侧；市场不下载、不写盘。
+* **卸载**：`uninstall_plugin({ pluginId })` → 移入回收站；确认用页面内弹窗。
+* **自动重扫**：装完调 `reload_plugins`，失败退回 `get_custom_plugins`。
+* **可更新标记**：`get_plugin_manifest` 读已装版本与目录版本做语义化比较。
+* **外链/剪贴板**：优先走 `open_external_url` / `write_clipboard`，否则降级。
+* **sha256 支持**：目录条目可带 `sha256`（校验器新增 E11），有就透传给宿主。
+  爬虫 `--merge` 时**保留**人工写入的 `sha256`，不会被覆盖掉。
+
+### 18.4 踩到的真坑：沙盒里没有 `allow-modals`
+
+最初用 `window.confirm()` 做安装确认。双宿主验收立刻报 `invoked=False` / `confirms=0` ——
+`tab` iframe 的 sandbox 不含 `allow-modals`，**原生确认框被静默拦掉并返回 `false`**，
+表现为「点了没反应，控制台一行错都没有」。
+
+改成页面内 `.mkt-scrim` 弹窗后通过。验收脚本现在断言 `usedNativeConfirm === false`，
+防止以后被改回 `confirm()`。**这条写进了 `pitfalls.md` #40。**
+
+### 18.5 验收
+
+* `python build_market.py --check` → 自检通过（62,645 字符）
+* `python market/validate_catalog.py` → 2 条通过
+* `bash _tools/market-verify.sh cyber` → `host=new` PASS、`host=old` PASS
+* `bash _tools/market-verify.sh mono` → 双 PASS（徽标去饱和 sat=0.098）
+* 已安装副本三个文件与产物 `cmp` 逐字节一致
+* `host=new` 实跑调用链：`get_plugin_host_capabilities` → `get_custom_plugins` →
+  `get_plugin_manifest` → `install_plugin_from_url` → `reload_plugins` → `uninstall_plugin`
+
+### 18.6 仍未验证的
+
+* GitHub 归档根部多出的 `repo-<branch>/` 目录与 `subpath` 如何组合 —— 未实测，
+  所以一键安装弹窗里**始终保留**「复制命令」的手动备用路径。
+* 新 exe 的前端载荷（`index-tvUoAylw.js` / `index-BvFgIA_4.css`）无法解压
+  （不是裸 brotli/zstd/xz），tab 的 sandbox 是否仍缺 `allow-downloads` / `allow-popups`
+  只能从本机 WebView2 的 V8 代码缓存间接确认（`data-slot` / `osd-slot-*` 仍在用）。
+* `service` 伴随服务与 `postMessage` 桥未做端到端验证。

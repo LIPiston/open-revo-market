@@ -160,12 +160,17 @@ python market/validate_catalog.py market/catalog.json
 * **`stars: null` = 取不到**，排序放最后，绝不当作 `0`（「比 0 还不受欢迎」）。
 * **失败不伪装**：在线目录拉不到时保留兜底数据，meta 行**如实**写
   `内置目录 · N 条（未连上在线目录：HTTP 404）`。爬虫失败时**不写文件**，让上次产物继续服务。
-* **不做假的一键安装**：宿主没有安装 IPC（§1.2），所以市场给**可复制的 PowerShell `git clone` 命令**，
-  并在弹窗顶部**明说**「本版宿主没有开放安装接口」。下载动作也不做 —— 无 `allow-downloads`。
+* **安装按能力探测降级，不按版本号猜**：市场启动时调 `get_plugin_host_capabilities`，
+  按 `can_install` / `can_uninstall` / `can_reload` / `can_read_manifest` 决定 UI。
+  两代宿主的版本号字符串可能相同，但一代有安装 IPC、一代没有 —— 只能靠探测。
+  能力为假时退回**可复制的 PowerShell `git clone` 命令**，并在弹窗里明说是降级路径。
+  市场本身**不下载、不写盘**（无 `allow-downloads`），所有危险动作都在宿主的安装器里。
+* **沙盒里没有 `allow-modals`**：`window.confirm` / `alert` 会被静默拦掉并返回 `false`。
+  任何「点了确认才继续」的流程都必须用页面内弹窗，**不能用原生确认框** —— 否则就是点了没反应。
 * **主题靠镜像**：iframe 是独立文档，宿主 `:root` 令牌**不继承** → 内联一份同名同值令牌，
   并用 `MutationObserver` 监听父文档 `data-theme`（cyber / mono / light）实时镜像。
-* **剪贴板三层降级**：`navigator.clipboard` → `document.execCommand('copy')` → 让用户手动选中。
-  沙盒下第一层可能被权限拦，**后两层是必需的，不是冗余**。
+* **剪贴板三层降级**：宿主 `write_clipboard`（若可用）→ `navigator.clipboard` → `document.execCommand('copy')`。
+  每层都可能单独失效，三层都不是冗余。
 
 ### 3.1 验收闸 `market-verify.sh` 的判据
 

@@ -18,7 +18,8 @@ docs\
 ├── devlog.md                            # 开发记录（时间线 + 证据 + 未决项）
 ├── OpenRevo_第三方插件开发手册.md         # 官方手册 v1.0 存档（存档 ≠ 行为准则）
 └── reference\
-    ├── market-host-constraints.md        # 插件市场为什么长这样：0.9.1 的 tab 契约 / 缺哪些接口
+    ├── host-plugin-ipc.md                # **当前宿主**新增的插件 IPC：安装/卸载/能力位（9,437,696 B 实测）
+    ├── market-host-constraints.md        # 「老宿主」基线：tab 契约 + 当时缺哪些接口（已被上一行部分推翻）
     ├── plugin-dev-0.8.8-skill.md         # 官方新版 Skill（0.8.8）逐条实测对照 + 背景壁纸通道
     ├── plugin-manual-digest.md           # 手册消化件 + 「手册 ≠ 发行版」对照表
     ├── host-truth-extraction.md          # 从 exe 抽宿主 CSS/JS；宿主 DOM/令牌/!important 对手规则
@@ -30,10 +31,14 @@ docs\
     └── pitfalls.md                       # 踩坑总表：现象 → 原因 → 对策
 ```
 
-> **取证基线是宿主 0.9.1**（exe 9,368,576 B）。`plugin-dev-0.8.8-skill.md` 与 `plugin-manual-digest.md`
-> 的对照基线是 **0.8.8**，只作历史对照；**凡与 0.9.1 冲突的，以 `market-host-constraints.md` 与
-> `_extracted/v091/` 的实测为准**。宿主会自我更新 —— 写断言前先比 exe 体积与资产文件名
-> （**文件名里的哈希就是内容哈希**）。
+> **取证基线有两代**，判断前先比 exe 体积：
+> * **老宿主** 9,368,576 B —— `market-host-constraints.md`（tab 契约、当时没有任何安装 IPC）
+> * **当前宿主** 9,437,696 B —— `host-plugin-ipc.md`（新增安装/卸载/能力位等整族 IPC）
+>
+> 两代的 `ProductVersion` **都报 0.9.1**，所以能力判断只能运行时探测，不能看版本号。
+> `plugin-dev-0.8.8-skill.md` 与 `plugin-manual-digest.md` 的对照基线是 **0.8.8**，只作历史对照；
+> **凡冲突，以 `host-plugin-ipc.md` 与 `_extracted/v091/` 的实测为准**。宿主会自我更新 ——
+> 写断言前先比 exe 体积与资产文件名（**文件名里的哈希就是内容哈希**）。
 
 > **仓库外的原文**：开发者新版 skill 在 `D:\LIPis\desktop\openrevo-plugin-dev\SKILL.md`（415 行）。
 > 它**不在本仓库内**，所以 `reference\plugin-dev-0.8.8-skill.md` 是它的**唯一耐久存档**；

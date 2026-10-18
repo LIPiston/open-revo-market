@@ -48,21 +48,27 @@ bash _tools/market-verify.sh cyber  # 验收闸（另跑 mono 主题）
 | **实时发现** | 直接查 GitHub 上带 topic `openrevo-plugin` 的仓库，作者打完 topic 立刻可见，不必等爬虫 |
 | **识别已安装** | 通过宿主只读命令 `get_custom_plugins` 给已装插件打标，并可按安装状态筛选 |
 | **能力披露** | 列出静态扫描检出的联网 / 文件读写等能力，危险组合单列（如「读凭据 + 有网络」） |
-| **安装交接** | 生成一条可直接粘贴的 PowerShell `git clone` 命令 + 复制按钮 + 打开插件目录 |
+| **安装 / 卸载** | 宿主开放 IPC 时一键完成（`install_plugin_from_url` / `uninstall_plugin`）；否则退回可粘贴的命令 |
 
-### 2.2 为什么不能「一键安装」
+### 2.2 安装方式由宿主能力决定
 
-**这是宿主的限制，不是市场偷懒。** 0.9.1 实测结论：
+宿主分两代，能力差别很大，所以市场**启动时探测** `get_plugin_host_capabilities`，
+按返回的能力位决定 UI，**不按版本号猜**（两代宿主的版本号字符串可能相同）：
 
-* Rust 命令表里**没有** `install_plugin` / `uninstall_plugin` / `reload_plugin`，也没有写插件目录的 IPC
-  （`write_file` / `write_text_file` / `create_dir` / `fs::write` 在 exe 与前端 JS 里**全 0 命中**）。
-* Tauri 侧只挂了 `autostart` 与 `single-instance`，**没有** `fs` / `dialog` / `shell` / `opener`。
-* `tab` 插件的 iframe 是 `sandbox="allow-scripts allow-forms allow-same-origin"`，
-  **不含 `allow-downloads` / `allow-popups`** ⇒ 下载与 `window.open` 都被浏览器层拦死。
+| 能力位 | 为真时 | 为假 / 命令不存在时 |
+|---|---|---|
+| `can_install` | 点【安装】直接调 `install_plugin_from_url`，宿主负责下载、校验、解压、落盘 | 弹窗给出可粘贴的 PowerShell 命令 |
+| `can_uninstall` | 卡片上出现【卸载】，目录移入回收站 | 隐藏【卸载】 |
+| `can_reload` | 装完调 `reload_plugins` 自动重扫 | 退回 `get_custom_plugins` 只读枚举 |
+| `can_read_manifest` | 读已装版本，标出「可更新」 | 不显示更新提示 |
 
-所以点【安装】不会替你下载，而是弹出卡片：**复制命令 → 终端粘一次 → 回插件页刷新**，
-并在界面顶部**明说本版宿主没有开放安装接口**。缺失接口的完整清单、建议签名与优先级见
-[`docs/reference/market-host-constraints.md`](docs/reference/market-host-constraints.md)。
+一键安装时市场**只发一条 IPC**，所有危险动作都在宿主侧：强制 HTTPS、可选 `sha256` 校验、
+解压防 Zip Slip、目标必须落在 AppData 边界内。市场自己不下载、不写盘 ——
+`tab` 插件的 iframe 既没有 `allow-downloads` 也没有 `allow-popups`，这类动作本来就不在插件手里。
+
+> 目录条目没带 `sha256` 时只能校验传输完整性，**证明不了内容没被篡改**。
+> 想升级为可验证安装，给 `catalog.json` 条目补 `sha256`（校验器 E11 会检查形状）。
+> 取证细节见 [`docs/reference/market-host-constraints.md`](docs/reference/market-host-constraints.md)。
 
 ### 2.3 目录与发现机制
 
@@ -384,7 +390,11 @@ python build_background.py install        # 背景
 
 ## 10. 已知边界
 
-* **市场不能一键安装**：宿主没有安装类 IPC（§2.2），只能给可复制的命令。
+* **一键安装依赖宿主能力**：新宿主开放了 `install_plugin_from_url` 等 IPC，老宿主没有；
+  市场按 `get_plugin_host_capabilities` 运行时降级（§2.2），不会假装能装。
+* **一键安装未在真机上端到端验证过**：命令名与参数名已从 exe 命令表逐字核实，
+  但 GitHub 归档多出的 `repo-<branch>/` 包装目录如何与 `subpath` 组合尚未实测，
+  所以弹窗里始终保留「复制命令」的手动路径。
 * **真机 CDP 不是工作路径**：宿主 `requireAdministrator`，且 WebView2 启动参数被 wry 覆盖，
   `--remote-debugging-port` 不会打开。真机取证只能走提权置顶抓图 + 像素度量。
 * **`widget` / `slot` 未实测**：形态枚举来自前端字面量，宿主里的实际行为没做过端到端验证。

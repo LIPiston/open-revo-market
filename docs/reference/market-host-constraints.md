@@ -1,8 +1,30 @@
 # 市场插件的宿主约束（v0.9.1 实测）
 
-本页记录**市场插件为什么长成现在这个样子**。每一条都由当前发行版实测得出，
+> ## ⚠️ 本页是「老宿主」基线，已被新一代宿主部分推翻
+>
+> 本页所有取证基于 **9,368,576 B** 那一版 exe（`v0.9.1-528c44b`）。
+> 之后宿主更新到 **9,437,696 B** 那一版（sha256 `796b75e0ecc3adaa…`，2026-10-18 17:03），
+> 新增了整族**市场与生命周期 IPC**，本页 §2 关于「没有任何安装接口」的结论**已不成立**：
+>
+> | 新宿主新增（在 exe 命令表逐字核实） | 本页对应结论 |
+> |---|---|
+> | `install_plugin_from_url { url, subpath?, sha256? }` | §2「没有安装 IPC」→ **已有** |
+> | `uninstall_plugin { pluginId }`（移入回收站） | 同上 → **已有** |
+> | `reload_plugins`、`get_plugin_manifest { pluginId }` | 同上 → **已有** |
+> | `get_plugin_host_capabilities` → `host_version` + `can_*` 能力位 | 按版本号判断 → **改为运行时探测** |
+> | `open_external_url { url }`、`write_clipboard { text }` | 沙盒限制 → **可由宿主代劳** |
+> | `set_plugin_enabled_unified { pluginId, enabled }` | 语义分叉 → **已统一** |
+>
+> **仍成立的部分**：`tab` iframe 的 sandbox 依然没有 `allow-downloads` / `allow-popups` / `allow-modals`
+> （所以下载与 `window.open` 仍被拦、`window.confirm` 仍会静默返回 false），
+> 以及「插件 HTML 以 `srcDoc` 注入、基准 URL 是 `tauri://localhost`」这两条。
+>
+> 下游影响：市场（`plugin-market`）已改为按 `get_plugin_host_capabilities` 降级；
+> 老宿主走「复制命令」交接，新宿主走一键安装。**本页继续作为老宿主的行为说明保留。**
+
+本页记录**市场插件为什么长成现在这个样子**。每一条都由当时那一版发行版实测得出，
 不是照抄手册。写这个插件时最重要的三个决定（tab 形态、不做一键装、命令交接）
-全部由本页的约束推导而来。
+全部由本页的约束推导而来 —— 其中「不做一键装」现已被新宿主推翻，见上方横幅。
 
 > **取证基线**：`D:\Program Files\OpenRevo\open-revo.exe`
 > 体积 **9,368,576 B**、`FileVersion` / `ProductVersion` 均为 **0.9.1**（mtime 2026-10-16 20:29）。
