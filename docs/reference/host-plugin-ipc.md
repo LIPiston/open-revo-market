@@ -84,9 +84,38 @@ can_write_clipboard  can_read_manifest  can_manage_service
 解压用 `tar.exe -xf` 或 `Expand-Archive` 双路由；下载用 `curl -fsSL -o` 或
 `Invoke-WebRequest`（含 TLS 1.2 强制）。
 
-**未确认**：GitHub 归档根部多出的 `repo-<branch>/` 包装目录与 `subpath` 如何组合。
-「resolved content directory」这个措辞暗示宿主会自动下钻，但没有实测。
-市场因此在一键安装之外**始终保留手动命令路径**。
+### 3.1 `subpath` 是**归档内**路径，不是仓库内路径（已实测）
+
+真机装自己时报：
+
+```
+安装失败: manifest.json not found in resolved content directory:
+"C:\Users\...\OpenRevo\plugins\.tmp_install_plugin-market\extracted\plugin-mar…
+```
+
+现场留下的目录说明了一切：
+
+```
+.tmp_install_plugin-market\
+  package.zip
+  extracted\
+    open-revo-market-main\          ← codeload 固定包装层
+      plugin-market\manifest.json   ← 插件真正在这里
+```
+
+宿主把 `subpath` **直接拼在 `extracted/` 后面**，**不会剥** codeload 的
+`<repo>-<branch>/` 包装层。所以：
+
+* 传仓库内路径 `plugin-market` → 去找 `extracted\plugin-market` → 不存在 → 报错；
+* 必须传 `open-revo-market-main/plugin-market`（= 归档根 + 仓库内路径）；
+* 插件就在仓库根时，`subpath` 至少要传归档根那一段（`<repo>-<branch>`）。
+
+归档根名规则：`<repo 名>-<branch 名>`，分支里的 `/` 换成 `-`
+（`feat/x` → `repo-feat-x`）。市场侧由 `archiveSubpath()` 统一构造，
+`build_market.py` 断言参数对象的 `subpath` 必须走这个函数。
+
+> 这条长期被写成「未实测」，代价是真机上一发即错。**未实测的假设不能只写在
+> 「已知边界」里就算交代过了 —— 要么验，要么在代码里给出保守取值。**
 
 ## 4. 伴随服务（`service`）
 

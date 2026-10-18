@@ -979,3 +979,115 @@ GitHub 的 topic 搜索本身是正常的（`topic:tauri` 有 16,928 条），�
 要让「市场能被别人搜到」，最少要做两步：
 ① `gh repo edit --add-topic openrevo-plugin`；
 ② 等下一次整点爬虫（或本地 `python market/crawl_topic.py --merge`）把条目写进目录。
+
+### 20.7 事实更正：topic 搜索确实能发现第三方插件
+
+上一条写完不久就出现了第一个外部带 topic 的仓库 `xmsjx/dgpu-igpu-saving`
+（topics = `["openrevo", "openrevo-plugin"]`），实测确认整条链路通：
+
+```
+api.github.com/search/repositories?q=topic:openrevo-plugin   →  total_count: 2
+python market/crawl_topic.py --merge                          →  共 2 条（tab 1 / slot 1）
+```
+
+所以「加 topic 就能被发现」对**别人**的仓库是成立的；对本仓库不成立只是因为
+自己还没打 topic。之前的措辞把两件事混成了一句，这里更正。
+
+## 21. 真机第二报：`subpath` 是归档内路径，不是仓库内路径
+
+### 21.1 现象
+
+补上 `id` 之后重装，报错换成了：
+
+```
+安装失败: manifest.json not found in resolved content directory:
+"C:\Users\...\OpenRevo\plugins\.tmp_install_plugin-market\extracted\plugin-mar…
+```
+
+### 21.2 取证：宿主留下的临时目录自己说明了答案
+
+安装失败后 `.tmp_install_plugin-market\` 没有被清理，直接看结构：
+
+```
+.tmp_install_plugin-market\
+  package.zip
+  extracted\
+    open-revo-market-main\          ← codeload 固定包装层
+      plugin-market\manifest.json   ← 插件真正在这里
+```
+
+对照 exe 里的串（`subpath` / `.tmp_install_` / `extracted` / `resolved content directory`
+全在同一片区域），可以判定宿主的行为是：
+
+```
+内容目录 = plugins/<id>/.tmp_install_<id>/extracted/<subpath>
+```
+
+它**不做**「剥掉单层根目录」这类智能处理（exe 里 `strip` 0 命中，
+`Verification failed: No valid 'manifest.json' detected in plugin root` 也只能说明
+「根上没 manifest 就整体判失败」）。于是传仓库内路径 `plugin-market` 就等于
+去找 `extracted\plugin-market` —— 那里什么都没有。
+
+### 21.3 修法与它的边界
+
+市场侧新增 `archiveSubpath()`：`subpath` 一律构造为
+`<repo>-<branch>/<仓库内子目录>`，分支里的 `/` 换成 `-`。
+插件就在仓库根时传 `<repo>-<branch>` 本身。
+
+这个构造依赖一条**外部事实**：GitHub codeload 的 zip 根部固定是 `<repo>-<branch>/`。
+所以它并非对任意归档源都成立 —— 目录条目若来自其它托管（未来可能），
+需要重新确认归档根名规则。
+
+### 21.4 又一次「mock 比真宿主松」
+
+上一轮修 `id` 时给 mock 加了 serde 校验，但**归档目录解析**完全没模拟 ——
+mock 对任何 `subpath` 都返回成功。所以同一个晚上踩了两次同一个模式的坑。
+现在 mock 会从 `url` 反推归档根，`subpath` 不在根内就直接抛真机同款错误，
+验收闸也断言 `subpath` 必须以 `repo-branch` 打头（反向验证能让它 FAIL）。
+
+**规律**：mock 要能复现的不仅是「参数格式」，还有「参数如何被消费」。
+
+## 22. 长目录浏览：滚动条形同虚设 + 补翻页
+
+### 22.1 现象
+
+用户反馈「要在插件市场提供滚动条和翻页，不然浏览有问题」。
+
+### 22.2 根因是一个从没被验证过的 CSS 假设
+
+`.mkt-body` 写了 `overflow-y: auto`，看起来能滚。但它的父链是：
+
+```
+body(100%) → #app(无高度) → .mkt(height:100%) → .mkt-body(flex:1, overflow:auto)
+```
+
+`#app` 没有高度，`.mkt { height: 100% }` 的百分比无处解析，退化成 `auto`；
+`.mkt-body` 于是被内容撑到自然高度，`scrollHeight == clientHeight`，永远不滚。
+
+实测数据（80 条目录）：
+
+| 状态 | `.mkt-body` clientHeight / scrollHeight | 能否滚动 |
+|---|---|---|
+| 修复前 | 5677 / 5677 | 否 |
+| 修复后 | 521 / 1107 | 是 |
+
+条目少时这条完全看不出来 —— 目录当时只有 1 条，内容根本填不满一屏。
+**这就是「验收只测了能渲染，没测过装满的情况」的代价。**
+
+### 22.3 改了什么
+
+* `#app { height:100%; min-height:0; display:flex; flex-direction:column }`，
+  `.mkt` 改 `flex:1 1 0%`（不再依赖百分比高度）。
+* 新增翻页：每页 12 条，页码按钮 + 上下页 + 「第 x–y 条 / 共 n 条」。
+  改搜索词、换筛选、翻页后都回到第 1 页；翻页后滚动位置归零。
+* 页数 ≤ 1 时不渲染翻页条（没内容可翻，别加噪音）。
+
+### 22.4 闸门：专门造一份「多到必须翻页」的目录
+
+验收脚本现在除了正常目录，还会生成一份 30 条的临时目录再跑一轮，
+断言：页数 = ceil(30/12) = 3、当前页 = 1、点「下一页」后页码变 2、
+当页条目数正确、滚动位置归零、且滚动容器真的可滚（`scrollHeight > clientHeight`）。
+
+反向验证：把 `#app` 的 `height:100%` 删掉，闸门立刻报
+`滚动失败：body 828/828 overflow=auto` → RESULT: FAIL。
+

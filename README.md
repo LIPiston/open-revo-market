@@ -42,7 +42,7 @@ bash _tools/market-verify.sh cyber  # 验收闸（另跑 mono 主题）
 
 | 能力 | 说明 |
 |---|---|
-| **浏览目录** | 拉取策展目录 `market/catalog.json`，按类型分组（已审核 / 未审核），支持搜索与筛选 |
+| **浏览目录** | 拉取策展目录 `market/catalog.json`，按类型分组（已审核 / 未审核），支持搜索与筛选；列表可滚动，超过一页自动分页（每页 12 条） |
 | **实时发现** | 直接查 GitHub 上带 topic `openrevo-plugin` 的仓库，作者打完 topic 立刻可见，不必等爬虫 |
 | **识别已安装** | 通过宿主只读命令 `get_custom_plugins` 给已装插件打标，并可按安装状态筛选 |
 | **能力披露** | 列出静态扫描检出的联网 / 文件读写等能力，危险组合单列（如「读凭据 + 有网络」） |
@@ -319,9 +319,10 @@ bash _tools/market-verify.sh mono                       # 另一套主题
 
 * **一键安装依赖宿主能力**：新宿主开放了 `install_plugin_from_url` 等 IPC，老宿主没有；
   市场按 `get_plugin_host_capabilities` 运行时降级（§2.2），不会假装能装。
-* **一键安装未在真机上端到端验证过**：命令名与参数名已从 exe 命令表逐字核实，
-  但 GitHub 归档多出的 `repo-<branch>/` 包装目录如何与 `subpath` 组合尚未实测，
-  所以弹窗里始终保留「复制命令」的手动路径。
+* **一键安装的参数链已在真机上对齐**：`{ id, url, subpath }` 逐字对上宿主 serde，
+  `subpath` 传的是**归档内**路径（`open-revo-market-main/plugin-market`）——
+  宿主不会剥 codeload 的 `<repo>-<branch>/` 包装层，这条是踩过一次才查清的
+  （`reference/host-plugin-ipc.md` §3.1）。弹窗里仍保留「复制命令」的手动路径。
 * **真机 CDP 不是工作路径**：宿主 `requireAdministrator`，且 WebView2 启动参数被 wry 覆盖，
   `--remote-debugging-port` 不会打开。真机取证只能走提权置顶抓图 + 像素度量。
 * **`widget` / `slot` 未实测**：形态枚举来自前端字面量，宿主里的实际行为没做过端到端验证。

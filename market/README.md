@@ -46,8 +46,14 @@ python build_market.py --install
 一键安装时市场只发一条 IPC，下载 / 校验 / 解压 / 落盘全在宿主侧：
 
 ```js
-invoke('install_plugin_from_url', { id, url, subpath?, sha256? })   // id 与 url 都必需
+invoke('install_plugin_from_url', { id, url, subpath, sha256? })   // id 与 url 都必需
 ```
+
+**`subpath` 是归档内路径，不是仓库内路径。** GitHub codeload 的 zip 解压后固定多一层
+`<repo>-<branch>/`，宿主把 `subpath` 直接拼在 `extracted/` 后面且**不会剥这层**，
+所以市场传的是 `open-revo-market-main/plugin-market`；插件在仓库根时传
+`open-revo-market-main` 本身。构造逻辑在 `archiveSubpath()`，
+详见 [`../docs/reference/host-plugin-ipc.md`](../docs/reference/host-plugin-ipc.md) §3.1。
 
 宿主自己负责：拒绝非 HTTPS、可选 `sha256` 校验、解压防 Zip Slip、目标必须落在 AppData 边界内。
 **市场不自己下载、不写盘** —— `tab` 的 iframe 既没有 `allow-downloads` 也没有 `allow-popups`，
@@ -57,8 +63,8 @@ invoke('install_plugin_from_url', { id, url, subpath?, sha256? })   // id 与 ur
 > 想升级为可验证安装，请给 `catalog.json` 条目补上 `sha256`。
 >
 > ⚠️ 一键安装走的是 GitHub 的源码归档（`codeload.github.com/<repo>/zip/refs/heads/<branch>`），
-> 归档根部会多一层 `repo-branch/` 目录；`subpath` 由宿主解析。若某个条目解析不对，
-> 弹窗里始终保留「复制命令」的手动备用路径。
+> 归档根名规则（`<repo>-<branch>`，分支里的 `/` 换成 `-`）由 `archiveSubpath()` 复刻。
+> 若某天接入非 GitHub 的归档源，这条规则要重新确认。弹窗里始终保留「复制命令」的手动备用路径。
 
 取证细节（含命令注册表与安装器的错误串）见 [`../docs/reference/host-plugin-ipc.md`](../docs/reference/host-plugin-ipc.md)；
 老宿主（完全没有安装 IPC）的基线在 [`../docs/reference/market-host-constraints.md`](../docs/reference/market-host-constraints.md)。

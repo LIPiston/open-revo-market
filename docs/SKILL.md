@@ -218,8 +218,12 @@ docs\
 * 插件市场已升级并验收：`market-verify.sh cyber` 与 `mono` 各跑 **两代宿主 mock**，
   四个组合全 PASS（0 JS 错误）。新宿主路径实跑
   `get_plugin_host_capabilities → install_plugin_from_url → reload_plugins → uninstall_plugin`。
-* `market/catalog.json` 收录 **1 条**（`plugin-market`），爬虫 `CURATED` 同步收敛。
-* 一键安装的市场侧代码已就绪，但**归档包装目录与 `subpath` 的组合未在真机端到端验证** ——
-  所以一键安装弹窗里始终保留手动 `git clone` 备用路径（`reference/host-plugin-ipc.md` §3）。
+* `market/catalog.json` 收录 **2 条**（`plugin-market` + 外部 `xmsjx/dgpu-igpu-saving`），
+  `topic:openrevo-plugin` 的 GitHub 搜索实查 `total_count: 2`，topic 发现链路已实测走通。
+* 一键安装的参数链已在**真机**上逐层校订过：`{ id, url, subpath }` 三个字段都必需/必须对，
+  其中 `subpath` 是**归档内**路径（宿主不会剥 codeload 的 `<repo>-<branch>/` 包装层）。
+  弹窗里仍保留手动 `git clone` 备用路径（`reference/host-plugin-ipc.md` §3.1）。
+* 长目录浏览：列表有滚动条 + 每页 12 条的翻页；验收闸会额外跑一份 30 条的临时目录，
+  断言滚动容器真的可滚、翻页真的能翻（`devlog.md` §22）。
 * 真机验证的边界：无法在真实宿主里驱动 CDP 抓图（`requireAdministrator` + 计划任务 `RunLevel=Highest`，
   且 9222 被用户 Chrome 占用）⇒ 上限是「等价沙盒 + 宿主目录枚举」。
