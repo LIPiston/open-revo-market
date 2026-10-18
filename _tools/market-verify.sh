@@ -44,7 +44,9 @@ done
 run_one() {
   local host="$1"
   local tag="$THEME-$host"
-  local page="http://127.0.0.1:$PORT/_tools/market-preview.html?theme=$THEME&host=$host"
+  # catalog=local：把市场对在线目录的 fetch 劫持到仓库里的 market/catalog.json。
+  # 不这样做，验收测的是 GitHub 上的旧目录 —— 本地改了目录但还没 push 时等于没测。
+  local page="http://127.0.0.1:$PORT/_tools/market-preview.html?theme=$THEME&host=$host&catalog=local"
   local prof
   prof="$(mktemp -d)"
   "$CHROME" --headless=new --disable-gpu --no-first-run \
@@ -58,10 +60,11 @@ run_one() {
   size=$(stat -c%s "$OUT/market-$tag.png" 2>/dev/null || echo 0)
   echo "=== host=$host  shot: _shots/market-$tag.png ($size bytes) ==="
 
-  python - "$OUT/market-$tag.dom.html" "$host" <<'PY'
+  python - "$OUT/market-$tag.dom.html" "$host" "$ROOT/market/catalog.json" <<'PY'
 import json, re, sys, html
 d = open(sys.argv[1], encoding='utf-8', errors='replace').read()
 host = sys.argv[2]
+catalog_path = sys.argv[3]
 m = re.search(r'<pre id="diag"[^>]*>(.*?)</pre>', d, re.S)
 if not m:
     print("diag: NOT FOUND —— 预览页没跑起来"); sys.exit(2)
@@ -71,12 +74,16 @@ try:
 except Exception:
     print("diag:", raw[:700]); sys.exit(3)
 
+# 卡片数必须等于本地目录条数 —— 只断言「> 0」会让「目录整个拉丢了」
+# 和「目录真的只有 1 条」看起来一样。
+want = len(json.load(open(catalog_path, encoding='utf-8'))['plugins'])
+
 errs = j.get('errors') or []
 inst = j.get('install') or {}
 uninst = j.get('uninstall') or {}
 live = j.get('live') or {}
 
-print(f"ready={j.get('ready')} cards={j.get('cards')} badges={j.get('badges')} "
+print(f"ready={j.get('ready')} cards={j.get('cards')}/{want} badges={j.get('badges')} "
       f"installed={j.get('installedBadges')}")
 print("calls: ", j.get('calls'))
 print("filter:", j.get('filterLabels'))
@@ -105,7 +112,7 @@ else:
 
 fail = (
     not j.get('ready')
-    or j.get('cards', 0) == 0
+    or j.get('cards', 0) != want
     or bool(errs)
     or not install_ok
     or live.get('live') != 'clicked'

@@ -52,7 +52,6 @@ const CALLS = [];
 // 默认模拟新宿主：能力位齐全、安装/卸载/重载都返回成功。
 const HOST_MODE = params.get('host') || 'new';
 const INSTALLED = [
-  { id: 'bg-custom', plugin_type: 'skin', enabled: false },
   { id: 'plugin-market', plugin_type: 'tab', enabled: true },
 ];
 
@@ -73,7 +72,7 @@ window.__TAURI_INTERNALS__ = {
     if (cmd === 'open_plugins_dir') return 'opened';
     if (cmd === 'install_plugin_from_url') return { id: 'mock-installed' };
     if (cmd === 'uninstall_plugin') return true;
-    if (cmd === 'get_plugin_manifest') return { id: 'bg-custom', version: '1.0.0' };
+    if (cmd === 'get_plugin_manifest') return { id: 'plugin-market', version: '1.1.0' };
     if (cmd === 'write_clipboard' || cmd === 'open_external_url') return true;
     return { ok: true, cmd };
   },
@@ -100,6 +99,18 @@ async function run() {
     diag.className = 'err'; diag.textContent = '无法读取 plugin-market/index.html：' + e.message;
     return;
   }
+  // ?catalog=local：把产物里的两个在线目录 URL 直接改写成仓库内的相对路径。
+  // 否则验收结果取决于远端分支状态 —— 本地改了目录但还没 push 时，测到的仍是旧目录，
+  // 「目录整个拉丢了」与「目录真的变了」也分不开。
+  // 改写字面量而不是劫持 window.fetch：沙盒里 fetch 在脚本执行前就被市场模块捕获，
+  // 事后替换常常不生效（实测踩过）。
+  if (params.get('catalog') === 'local') {
+    html = html
+      .replaceAll('https://raw.githubusercontent.com/LIPiston/open-revo-market/main/market/catalog.json',
+                  '../market/catalog.json')
+      .replaceAll('https://cdn.jsdelivr.net/gh/LIPiston/open-revo-market@main/market/catalog.json',
+                  '../market/catalog.json');
+  }
   f.srcdoc = html;
 
   // 装好错误钩子（子窗口与父窗口同源，可直接读写）
@@ -123,8 +134,10 @@ function snapshot() {
     ready: !!(app && app.children.length),
     theme: d.documentElement.getAttribute('data-theme'),
     parentTheme: (function(){ try { return w.parent.document.documentElement.getAttribute('data-theme'); } catch(e){ return 'ERR:'+e.message; } })(),
-    badgeColor: (function(){ const b=d.querySelector('.mkt-badge.type-skin'); return b? getComputedStyle(b).color : null; })(),
-    badgeBg: (function(){ const b=d.querySelector('.mkt-badge.type-skin'); return b? getComputedStyle(b).backgroundColor : null; })(),
+    // 取第一枚「类型徽标」（type-<plugin_type>），不写死 skin ——
+    // 目录里没有皮肤条目时写死 .type-skin 会取到 null，让主题断言恒真。
+    badgeColor: (function(){ const b=d.querySelector('.mkt-badge[class*="type-"]'); return b? getComputedStyle(b).color : null; })(),
+    badgeBg: (function(){ const b=d.querySelector('.mkt-badge[class*="type-"]'); return b? getComputedStyle(b).backgroundColor : null; })(),
     appChildren: app ? app.children.length : 0,
     cards: cards.length,
     sources: d.querySelectorAll('.mkt-src').length,
@@ -261,11 +274,14 @@ setTimeout(async () => {
   try { live = await exerciseLive(); } catch (e) { live = { live: 'threw: ' + e.message }; }
 
   // 主题判定：mono 下类型徽标必须去饱和（宿主 mono 是整套灰阶）。
+  // 选 type-* 而不是 type-skin：皮肤条目删掉后写死 skin 会取到 null，断言就白写了。
   const w = f.contentWindow;
-  const bd = w.document.querySelector('.mkt-badge.type-skin');
+  const bd = w.document.querySelector('.mkt-badge[class*="type-"]');
   const rgb = bd ? getComputedStyle(bd).color.match(/\d+/g).map(Number) : null;
   const sat = rgb ? (Math.max(...rgb) - Math.min(...rgb)) / Math.max(...rgb) : null;
-  const themeOk = THEME === 'mono' ? (sat !== null && sat < 0.12) : true;
+  // 取不到就是没测到 —— 不能当成通过。
+  // cyber 下只要求「确实取到了徽标」（颜色不做阈值），mono 下还要求去饱和。
+  const themeOk = bd !== null && (THEME === 'mono' ? (sat !== null && sat < 0.12) : true);
 
   // 两条宿主路径的成功判据不同，但都必须成立：
   //   oneclick → 弹确认窗 → 点【立即安装】→ 真发 install_plugin_from_url（并重扫）
