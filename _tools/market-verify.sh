@@ -99,6 +99,7 @@ for e in errs:
 
 # 宿主能力决定成功判据，两条都必须成立：
 #   new  → 弹确认窗 → 点【立即安装】→ 真发 install_plugin_from_url，且不依赖 window.confirm
+#          并且宿主没拒参数（mockErrors 空）、参数里确实带了 id
 #   old  → 弹窗并给出含 plugins 路径的可粘贴命令
 if host == 'new':
     install_ok = (
@@ -106,7 +107,15 @@ if host == 'new':
         and inst.get('install') == 'confirmed'
         and inst.get('invoked')
         and inst.get('usedNativeConfirm') is False
+        and inst.get('stillOpen') is False
+        and not (inst.get('mockErrors') or [])
+        and (inst.get('args') or {}).get('id')
+        and (inst.get('args') or {}).get('url')
     )
+    if inst.get('mockErrors'):
+        print("宿主拒收的调用：", inst['mockErrors'])
+    if inst.get('stillOpen'):
+        print("安装弹窗未关闭 —— installEntry 抛了：", inst.get('toast'))
 else:
     install_ok = inst.get('mode') == 'legacy' and inst.get('install') == 'modal-open' and inst.get('hasCmd')
 

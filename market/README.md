@@ -46,7 +46,7 @@ python build_market.py --install
 一键安装时市场只发一条 IPC，下载 / 校验 / 解压 / 落盘全在宿主侧：
 
 ```js
-invoke('install_plugin_from_url', { url, subpath?, sha256? })   // url 必须是 https
+invoke('install_plugin_from_url', { id, url, subpath?, sha256? })   // id 与 url 都必需
 ```
 
 宿主自己负责：拒绝非 HTTPS、可选 `sha256` 校验、解压防 Zip Slip、目标必须落在 AppData 边界内。

@@ -48,6 +48,10 @@ if (!SHOW_DIAG) {
 }
 
 const CALLS = [];
+// 宿主安装器拒绝过的调用（参数不合法）。验收必须把它当成失败 ——
+// 市场自己 catch 了异常只弹 toast，不产生未捕获错误，光看 errors 是发现不了的。
+const MOCK_ERRORS = [];
+const INSTALL_ARGS = [];
 // ?host=old 模拟没有安装接口的老宿主（0.9.1）：get_plugin_host_capabilities 直接 reject。
 // 默认模拟新宿主：能力位齐全、安装/卸载/重载都返回成功。
 const HOST_MODE = params.get('host') || 'new';
@@ -70,7 +74,35 @@ window.__TAURI_INTERNALS__ = {
     if (cmd === 'get_custom_plugins') return INSTALLED;
     if (cmd === 'reload_plugins') return INSTALLED;
     if (cmd === 'open_plugins_dir') return 'opened';
-    if (cmd === 'install_plugin_from_url') return { id: 'mock-installed' };
+    // 复刻真宿主的 serde 校验：install_plugin_from_url 的必需字段是 { id, url }。
+    // 这是被真机打过脸的：早先市场只传了 { url, subpath? }，宿主直接回
+    //   invalid args `id` for command `install_plugin_from_url`: missing required key id
+    // 只传 url 就成功返回，等于把真实故障藏起来 —— mock 必须比真宿主更挑，不能更松。
+    if (cmd === 'install_plugin_from_url') {
+      const a = args || {};
+      INSTALL_ARGS.push(a);
+      const missing = ['id', 'url'].filter((k) => !a[k]);
+      if (missing.length) {
+        MOCK_ERRORS.push('missing required key ' + missing[0]);
+        throw new Error(
+          'invalid args `' + missing[0] + '` for command `install_plugin_from_url`: ' +
+          'command install_plugin_from_url missing required key ' + missing[0]
+        );
+      }
+      if (!/^https:\/\//.test(String(a.url))) {
+        MOCK_ERRORS.push('url not https: ' + String(a.url).slice(0, 40));
+        throw new Error('Security violation: Plugin download URL must strictly use HTTPS');
+      }
+      if (/[\\/]|\.\./.test(String(a.id))) {
+        MOCK_ERRORS.push('bad plugin id: ' + a.id);
+        throw new Error('Security violation: Plugin ID contains illegal characters or path separators');
+      }
+      if (a.subpath && /\.\./.test(String(a.subpath))) {
+        MOCK_ERRORS.push('subpath traversal: ' + a.subpath);
+        throw new Error('Security violation: subpath cannot contain \'..\'');
+      }
+      return { id: a.id, name: a.id, installed: true };
+    }
     if (cmd === 'uninstall_plugin') return true;
     if (cmd === 'get_plugin_manifest') return { id: 'plugin-market', version: '1.1.0' };
     if (cmd === 'write_clipboard' || cmd === 'open_external_url') return true;
@@ -209,10 +241,17 @@ async function exerciseInstall() {
   go.click();
   await new Promise((r) => setTimeout(r, 600));
   const callsSince = CALLS.slice(before).map((c) => c[0]);
+  // 弹窗还在 = installEntry 抛了（市场自己 catch 后只弹 toast）⇒ 必须当失败报出来
+  const stillOpen = !!d.querySelector('.mkt-scrim');
+  const toastEl = d.getElementById('toast');
   return {
     install: 'confirmed', mode,
     invoked: callsSince.includes('install_plugin_from_url'),
     reloaded: callsSince.includes('reload_plugins'),
+    stillOpen,
+    toast: toastEl ? toastEl.textContent.slice(0, 120) : null,
+    args: INSTALL_ARGS.length ? INSTALL_ARGS[INSTALL_ARGS.length - 1] : null,
+    mockErrors: MOCK_ERRORS.slice(),
     // 沙盒里 window.confirm 会被拦并返回 false —— 市场不该依赖它
     usedNativeConfirm: window.__CONFIRMS__.length > 0,
   };
@@ -287,11 +326,16 @@ setTimeout(async () => {
   //   oneclick → 弹确认窗 → 点【立即安装】→ 真发 install_plugin_from_url（并重扫）
   //   legacy   → 弹窗并给出含 plugins 路径的可粘贴命令
   // 两条都不许依赖 window.confirm：沙盒没有 allow-modals，原生确认框会静默返回 false。
+  // oneclick 还要求：宿主没拒参数（mockErrors 空）、弹窗已关闭（installEntry 没抛）、
+  // 且参数里确实带了 id（真机就是缺它失败过一次）。
   const installOk = install && (
     (install.mode === 'oneclick'
       && install.install === 'confirmed'
       && install.invoked
-      && install.usedNativeConfirm === false)
+      && install.usedNativeConfirm === false
+      && install.stillOpen === false
+      && (install.mockErrors || []).length === 0
+      && install.args && install.args.id && install.args.url)
     || (install.mode === 'legacy' && install.install === 'modal-open' && install.hasCmd)
   );
 

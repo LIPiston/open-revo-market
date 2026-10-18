@@ -610,7 +610,7 @@ html[data-theme="mono"] .mkt-btn.danger {
  *  4. iframe 是独立文档，宿主 :root 令牌**不继承** → 主题靠读父文档 data-theme 手动镜像。
  *
  * 已核实的 IPC 签名（参数名逐字取自 exe 命令注册表，勿按文档臆改）：
- *   install_plugin_from_url { url, subpath?, sha256? }  // url 必须是 https
+ *   install_plugin_from_url { id, url, subpath?, sha256? }  // id 必需，决定安装目录名
  *   uninstall_plugin        { pluginId }                // 移入回收站
  *   reload_plugins          ()                          // 重扫目录，返回插件列表
  *   get_plugin_manifest     { pluginId }
@@ -1028,16 +1028,27 @@ function canOneClick() {
 }
 
 /** 一键安装：把下载/校验/解压/落盘/热重载全部交给宿主，市场只发一条 IPC。
- *  这是宿主自己实现的安装器（强制 https、可选 sha256、防 Zip Slip、AppData 边界断言）。 */
+ *  这是宿主自己实现的安装器（强制 https、可选 sha256、防 Zip Slip、AppData 边界断言）。
+ *
+ *  参数表逐字取自 exe 命令注册表：{ id, url, subpath?, sha256? }
+ *  **`id` 是必需项**（宿主的 serde 缺它直接报
+ *  `command install_plugin_from_url missing required key id`），它决定安装后的目录名。
+ *  exe 明文里 `id` / `url` 因被其它命令复用而被编译器去重，只有 `subpath` / `sha256`
+ *  紧跟在命令名后面 —— 别只照着那个窗口抄。 */
 async function installEntry(entry) {
   if (!canOneClick()) throw new Error('本版宿主没有开放安装接口');
   if (state.busy) throw new Error('已有安装任务在进行');
+  // id 会成为插件目录名：宿主会拒绝含路径分隔符/上传目录的取值，
+  // 这里先按同一口径挡一次，省得把宿主的报错原样甩给用户。
+  if (!entry.id || /[\\/\u0000]|\.\./.test(entry.id)) {
+    throw new Error(`插件 id 非法，无法安装：${entry.id}`);
+  }
 
   state.busy = entry.id;
   render();
 
   try {
-    const args = { url: archiveUrl(entry) };
+    const args = { id: entry.id, url: archiveUrl(entry) };
     if (entry.subpath) args.subpath = entry.subpath;
     if (entry.sha256) args.sha256 = entry.sha256;
 

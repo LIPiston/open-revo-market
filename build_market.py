@@ -129,6 +129,22 @@ def sanity_checks(html: str) -> list[str]:
     if re.search(r"expectedSha256", js_src):
         problems.append("install_plugin_from_url 的参数是 sha256，不是 expectedSha256")
 
+    # install_plugin_from_url 的必需参数是 { id, url } —— 少了 id 宿主会直接拒：
+    #   invalid args `id` ... missing required key id
+    # 这条是真机上踩过的：只看 exe 里紧跟命令名的 subpath/sha256 会误以为只有三个字段，
+    # 因为 id 与 url 被其它命令复用、已被编译器去重到别处。
+    # 参数对象是变量（args）再传进去，所以校验它的构造处，而不是调用处。
+    m = re.search(r"const\s+args\s*=\s*(\{[^}]*\})", js_src)
+    if not m:
+        problems.append("找不到 install_plugin_from_url 的参数对象，无法校验必需字段")
+    else:
+        call_args = m.group(1)
+        for k in ("id", "url"):
+            if not re.search(rf"\b{k}\s*:", call_args):
+                problems.append(f"install_plugin_from_url 必须传 {k}（宿主必需字段）")
+        if "install_plugin_from_url" not in js_src:
+            problems.append("没有调用 install_plugin_from_url")
+
     # 绝不能把「本版宿主没有安装接口」这类判断写死成版本号
     if re.search(r"v?0\.9\.1[^0-9]", js_src):
         problems.append("market.js 里仍硬编码宿主版本号 —— 能力必须运行时探测")

@@ -31,8 +31,11 @@ OpenRevo 主控台里的一个 `tab` 页签：浏览第三方插件、看能力�
 安装时市场只发一条 IPC：
 
 ```js
-invoke('install_plugin_from_url', { url: 'https://codeload.github.com/<repo>/zip/refs/heads/<branch>', subpath? })
+invoke('install_plugin_from_url', { id, url: 'https://codeload.github.com/<repo>/zip/refs/heads/<branch>', subpath? })
 ```
+
+`id` 与 `url` 都是**宿主 serde 的必需字段**，缺一个就是
+`missing required key <name>`；`id` 同时决定安装后的目录名。`subpath` / `sha256` 可选。
 
 **宿主**负责下载、校验、解压、落盘，具体防线都在宿主侧：
 
