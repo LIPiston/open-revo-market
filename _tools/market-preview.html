@@ -59,6 +59,26 @@ const INSTALLED = [
   { id: 'plugin-market', plugin_type: 'tab', enabled: true },
 ];
 
+/** 从 codeload 地址推出解压后的归档根目录名：`<repo>-<branch>`（`/` 换成 `-`）。
+ *  https://codeload.github.com/owner/repo/zip/refs/heads/feat/x → repo-feat-x */
+function archiveRootOf(url) {
+  const m = /codeload\.github\.com\/([^/]+)\/([^/]+)\/zip\/refs\/heads\/(.+)$/.exec(String(url));
+  if (!m) return null;
+  return m[2] + '-' + decodeURIComponent(m[3]).replace(/\//g, '-');
+}
+
+/** 复刻真宿主「resolved content directory」的解析：extracted/<subpath>。
+ *  关键点 —— 宿主**不剥** codeload 的归档包装目录，subpath 必须自己带上它。 */
+function resolvedContentDir(a) {
+  const root = archiveRootOf(a.url);
+  if (!root) return null;
+  const sub = String(a.subpath || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+  // 没传 subpath 时宿主用 extracted/ 本身（这种情况未实测，先不判死）
+  if (!sub) return { dir: '', root, ok: true };
+  if (sub !== root && !sub.startsWith(root + '/')) return null;
+  return { dir: sub, root, ok: true };
+}
+
 window.__TAURI_INTERNALS__ = {
   invoke: async (cmd, args) => {
     CALLS.push([cmd, args]);
@@ -101,7 +121,19 @@ window.__TAURI_INTERNALS__ = {
         MOCK_ERRORS.push('subpath traversal: ' + a.subpath);
         throw new Error('Security violation: subpath cannot contain \'..\'');
       }
-      return { id: a.id, name: a.id, installed: true };
+      // 复刻真宿主的**归档目录解析**：codeload 的 zip 解压后固定多一层
+      // `<repo>-<branch>/`，宿主把 subpath 直接拼在 extracted/ 后面，**不会剥这层**。
+      // 早先市场传的是仓库内路径（plugin-market），宿主去找 extracted\plugin-market，
+      // 真机上就是 manifest.json not found in resolved content directory。
+      // mock 必须复现这条，否则「参数对了但布局错了」永远验不出来。
+      const dir = resolvedContentDir(a);
+      if (!dir) {
+        MOCK_ERRORS.push('subpath 未落在归档根目录内: ' + a.subpath);
+        throw new Error('manifest.json not found in resolved content directory: ' +
+          'C:\\Users\\x\\AppData\\Roaming\\OpenRevo\\plugins\\.tmp_install_' + a.id +
+          '\\extracted\\' + String(a.subpath || '').replace(/\//g, '\\'));
+      }
+      return { id: a.id, name: a.id, installed: true, dir };
     }
     if (cmd === 'uninstall_plugin') return true;
     if (cmd === 'get_plugin_manifest') return { id: 'plugin-market', version: '1.1.0' };
@@ -137,11 +169,13 @@ async function run() {
   // 改写字面量而不是劫持 window.fetch：沙盒里 fetch 在脚本执行前就被市场模块捕获，
   // 事后替换常常不生效（实测踩过）。
   if (params.get('catalog') === 'local') {
+    // catalogPath 可覆盖目录文件，用于验收「条目多到要翻页」的场景
+    const catPath = params.get('catalogPath') || '../market/catalog.json';
     html = html
       .replaceAll('https://raw.githubusercontent.com/LIPiston/open-revo-market/main/market/catalog.json',
-                  '../market/catalog.json')
+                  catPath)
       .replaceAll('https://cdn.jsdelivr.net/gh/LIPiston/open-revo-market@main/market/catalog.json',
-                  '../market/catalog.json');
+                  catPath);
   }
   f.srcdoc = html;
 
@@ -181,6 +215,31 @@ function snapshot() {
     meta: (d.querySelector('.mkt-meta') || {}).textContent || null,
     footer: (d.querySelector('.mkt-footer') || {}).textContent || null,
     toast: toast ? toast.textContent : null,
+    // 滚动条：容器必须真的能滚（scrollHeight > clientHeight），且外层没有撑成 auto。
+    // 早先 #app 缺 height，.mkt 退化成 auto，overflow:auto 永不触发 —— 插件少时看不出来。
+    scroll: (function () {
+      const b = d.querySelector('.mkt-body');
+      if (!b) return null;
+      return {
+        can: b.scrollHeight > b.clientHeight,
+        h: b.clientHeight, sh: b.scrollHeight,
+        overflow: getComputedStyle(b).overflowY,
+      };
+    })(),
+    // 翻页：页数、当前页、页码按钮、总量与区间
+    pager: (function () {
+      const p = d.querySelector('.mkt-pager');
+      if (!p) return null;
+      const btns = Array.from(p.querySelectorAll('[data-page]'))
+        .map((b) => Number(b.getAttribute('data-page')))
+        .filter((n) => !Number.isNaN(n));
+      const active = p.querySelector('.pg.active');
+      return {
+        pages: btns.length ? Math.max(...btns) : 0,
+        current: active ? Number(active.getAttribute('data-page')) : null,
+        pageSize: (d.querySelector('.pg-info') || {}).textContent || null,
+      };
+    })(),
   };
 }
 
@@ -251,9 +310,52 @@ async function exerciseInstall() {
     stillOpen,
     toast: toastEl ? toastEl.textContent.slice(0, 120) : null,
     args: INSTALL_ARGS.length ? INSTALL_ARGS[INSTALL_ARGS.length - 1] : null,
+    // 宿主解析出的「content directory」—— 真机报错就出在这一步
+    dir: (INSTALL_ARGS.length ? resolvedContentDir(INSTALL_ARGS[INSTALL_ARGS.length - 1]) : null),
     mockErrors: MOCK_ERRORS.slice(),
     // 沙盒里 window.confirm 会被拦并返回 false —— 市场不该依赖它
     usedNativeConfirm: window.__CONFIRMS__.length > 0,
+  };
+}
+
+/** 翻页演练：点下一页 → 页码/条目/滚动位置都要跟着变。
+ *  只断言「有翻页条」是不够的：按钮存在但点不动，或翻页后仍停在上一页的滚动位置，
+ *  用户看到的就是「点了没反应」。 */
+async function exercisePaging() {
+  const w = f.contentWindow;
+  const d = w.document;
+  const pager = d.querySelector('.mkt-pager');
+  if (!pager) return { paging: 'no pager' };
+
+  const active = () => {
+    const a = d.querySelector('.pg.active');
+    return a ? Number(a.getAttribute('data-page')) : null;
+  };
+  const cards = () => d.querySelectorAll('.mkt-card').length;
+  const info = () => (d.querySelector('.pg-info') || {}).textContent || null;
+
+  const startPage = active();
+  const startCards = cards();
+  const next = Array.from(pager.querySelectorAll('[data-page]'))
+    .find((b) => Number(b.getAttribute('data-page')) === (startPage || 0) + 1);
+  if (!next) return { paging: 'no next button', startPage };
+
+  const body = d.querySelector('.mkt-body');
+  if (body) body.scrollTop = 9999;
+  const scrolledBefore = body ? body.scrollTop : null;
+
+  next.click();
+  await new Promise((r) => setTimeout(r, 400));
+
+  const body2 = d.querySelector('.mkt-body');
+  return {
+    paging: 'clicked',
+    startPage, endPage: active(),
+    startCards, endCards: cards(),
+    info: info(),
+    // 翻页后必须回到顶部，否则用户会落在新一页的中间
+    topAfter: body2 ? body2.scrollTop : null,
+    scrolledBefore,
   };
 }
 
@@ -311,6 +413,9 @@ setTimeout(async () => {
   try { uninst = await exerciseUninstall(); } catch (e) { uninst = { uninstall: 'threw: ' + e.message }; }
   let live = null;
   try { live = await exerciseLive(); } catch (e) { live = { live: 'threw: ' + e.message }; }
+  // 翻页演练放在最后：它会切页，会影响前面截图的卡片计数
+  let paging = null;
+  try { paging = await exercisePaging(); } catch (e) { paging = { paging: 'threw: ' + e.message }; }
 
   // 主题判定：mono 下类型徽标必须去饱和（宿主 mono 是整套灰阶）。
   // 选 type-* 而不是 type-skin：皮肤条目删掉后写死 skin 会取到 null，断言就白写了。
@@ -344,7 +449,8 @@ setTimeout(async () => {
 
   diag.className = ok ? 'ok' : 'err';
   diag.textContent = JSON.stringify({
-    host: HOST_MODE, ready: s.ready, cards: s.cards, errors, install, uninstall: uninst, live,
+    host: HOST_MODE, ready: s.ready, cards: s.cards, errors, install, uninstall: uninst, live, paging,
+    scroll: s.scroll, pager: s.pager,
     calls: [...new Set(CALLS.map(c => c[0]))], sources: s.sources, badges: s.badges,
     installedBadges: s.installedBadges, filterLabels: s.filterLabels,
     meta: (s.meta || '').replace(/\s+/g, ' ').trim(),

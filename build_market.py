@@ -145,6 +145,14 @@ def sanity_checks(html: str) -> list[str]:
         if "install_plugin_from_url" not in js_src:
             problems.append("没有调用 install_plugin_from_url")
 
+    # subpath 必须是**归档内**路径 —— 宿主把 subpath 直接拼在 extracted/ 后面去找
+    # manifest.json，不会剥掉 codeload 的 `repo-<branch>/` 包装目录。
+    # 真机报错：manifest.json not found in resolved content directory: ...\extracted\plugin-market
+    if "archiveSubpath" not in js_src:
+        problems.append("install_plugin_from_url 的 subpath 必须经 archiveSubpath() 补上归档根目录")
+    elif not re.search(r"subpath\s*:\s*archiveSubpath\(", js_src):
+        problems.append("参数对象里的 subpath 没有走 archiveSubpath()")
+
     # 绝不能把「本版宿主没有安装接口」这类判断写死成版本号
     if re.search(r"v?0\.9\.1[^0-9]", js_src):
         problems.append("market.js 里仍硬编码宿主版本号 —— 能力必须运行时探测")

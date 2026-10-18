@@ -107,6 +107,7 @@ const state = {
   query: '',
   typeFilter: 'all',     // 'all' | plugin_type | '__installed__' | '__unreviewed__'
   sort: 'stars',         // 'stars' | 'name' | 'updated'
+  page: 1,               // 当前页码（1 起）。改筛选/搜索/排序一律回到第 1 页。
   installed: new Set(),  // 已安装插件 id（来自宿主 get_custom_plugins）
   installedMeta: {},     // id -> { plugin_type, enabled }
   hostInfo: null,        // { hasBridge: boolean, error: string|null }
@@ -433,6 +434,25 @@ function archiveUrl(entry) {
   return `https://codeload.github.com/${entry.repo}/zip/refs/heads/${encodeURIComponent(branch)}`;
 }
 
+/** GitHub codeload 归档的根目录名：`<repo>-<branch>`（分支里的 `/` 换成 `-`）。
+ *  宿主**不会**替你剥掉这一层 —— 它把 `subpath` 直接拼在 `extracted/` 后面去找
+ *  `manifest.json`，拼出来的目录不存在就报
+ *  `manifest.json not found in resolved content directory: ...\extracted\<subpath>`。 */
+function archiveRoot(entry) {
+  const branch = entry.branch || 'main';
+  const name = (entry.repo || '').split('/').pop() || entry.id;
+  return `${name}-${branch.replace(/\//g, '-')}`;
+}
+
+/** 真正传给宿主的 `subpath` —— 它是**归档内**路径，不是仓库内路径，
+ *  所以必须以归档根目录开头。仓库内 `subpath` 为空（插件就在仓库根）时，
+ *  这里传的也是归档根目录那一段。 */
+function archiveSubpath(entry) {
+  const root = archiveRoot(entry);
+  const sub = (entry.subpath || '').replace(/^[\\/]+|[\\/]+$/g, '');
+  return sub ? `${root}/${sub}` : root;
+}
+
 /** 人看的源码/子目录地址（用于「在浏览器打开」）。 */
 function repoUrl(entry) {
   const branch = entry.branch || 'main';
@@ -465,8 +485,7 @@ async function installEntry(entry) {
   render();
 
   try {
-    const args = { id: entry.id, url: archiveUrl(entry) };
-    if (entry.subpath) args.subpath = entry.subpath;
+    const args = { id: entry.id, url: archiveUrl(entry), subpath: archiveSubpath(entry) };
     if (entry.sha256) args.sha256 = entry.sha256;
 
     const result = await hostInvoke('install_plugin_from_url', args);
@@ -793,14 +812,15 @@ function liveBanner() {
 }
 
 function render() {
-  const list = filtered();
+  const all = filtered();
+  const { list, pages, page } = paginate(all);
   const groups = {};
   for (const p of list) (groups[p.unreviewed ? 'unreviewed' : 'reviewed'] = groups[p.unreviewed ? 'unreviewed' : 'reviewed'] || []).push(p);
 
   let body = '';
-  if (state.loading && !list.length) {
+  if (state.loading && !all.length) {
     body = `<div class="mkt-grid">${'<div class="mkt-skel"></div>'.repeat(6)}</div>`;
-  } else if (!list.length) {
+  } else if (!all.length) {
     body = emptyBlock();
   } else {
     if (groups.reviewed && groups.reviewed.length) {
@@ -818,6 +838,7 @@ function render() {
       ${toolbar()}
       ${metaLine()}
       <div class="mkt-body">${liveBanner()}${body}</div>
+      ${pager(pages, page, all.length)}
       <div class="mkt-footer">
         <b>插件是第三方代码，以你的权限运行。</b>本市场只做来源绑定与静态披露，不构成安全审计。
         安装即把代码写入插件目录，卸载即删除对应文件夹 —— 请只安装你信任的来源。
@@ -828,12 +849,52 @@ function render() {
   bind();
 }
 
+/* --------------------------------------------------------------- paginate */
+const PAGE_SIZE = 12;
+
+/** 把筛选后的列表切成当前页。页码越界（改筛选后条目变少）时夹回最后一页 ——
+ *  否则用户会停在一个空页面上，以为市场坏了。 */
+function paginate(list) {
+  const pages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
+  const page = Math.min(Math.max(1, state.page), pages);
+  if (page !== state.page) state.page = page;
+  const start = (page - 1) * PAGE_SIZE;
+  return { list: list.slice(start, start + PAGE_SIZE), pages, page };
+}
+
+/** 页码按钮：首页、末页、当前页 ±1，中间用省略号。
+ *  目录真的只有一页时不渲染翻页条（避免给「没内容可翻」的情况加噪音）。 */
+function pager(pages, page, total) {
+  if (pages <= 1) return '';
+  const nums = new Set([1, pages, page - 1, page, page + 1]);
+  const shown = [...nums].filter((n) => n >= 1 && n <= pages).sort((a, b) => a - b);
+  const btns = [];
+  let prev = 0;
+  for (const n of shown) {
+    if (prev && n - prev > 1) btns.push('<span class="pg-gap">…</span>');
+    btns.push(`<button class="pg${n === page ? ' active' : ''}" data-page="${n}"
+      ${n === page ? 'aria-current="page"' : ''}>${n}</button>`);
+    prev = n;
+  }
+  const from = (page - 1) * PAGE_SIZE + 1;
+  const to = Math.min(page * PAGE_SIZE, total);
+  return `
+    <div class="mkt-pager">
+      <button class="pg" data-page="${page - 1}" ${page === 1 ? 'disabled' : ''} title="上一页">‹</button>
+      ${btns.join('')}
+      <button class="pg" data-page="${page + 1}" ${page === pages ? 'disabled' : ''} title="下一页">›</button>
+      <span class="spacer"></span>
+      <span class="pg-info">第 ${from}–${to} 条，共 ${total} 条 · 每页 ${PAGE_SIZE}</span>
+    </div>`;
+}
+
 function bind() {
   const q = $('#q');
   if (q) {
     // 保持输入焦点与光标位置，避免每次 render 打断输入
     q.addEventListener('input', (e) => {
       state.query = e.target.value;
+      state.page = 1;
       const pos = e.target.selectionStart;
       render();
       const nq = $('#q');
@@ -845,7 +906,21 @@ function bind() {
     el.addEventListener('click', () => {
       state.typeFilter = el.getAttribute('data-filter');
       state.live = null;
+      state.page = 1;   // 换了筛选，页码没有意义了
       render();
+    });
+  });
+
+  // 翻页：只改页码，然后滚回顶部 —— 否则用户翻到第 2 页还停在上一页的底部
+  document.querySelectorAll('[data-page]').forEach((el) => {
+    el.addEventListener('click', () => {
+      if (el.disabled) return;
+      const n = Number(el.getAttribute('data-page'));
+      if (!Number.isFinite(n) || n === state.page) return;
+      state.page = n;
+      render();
+      const body = $('.mkt-body');
+      if (body) body.scrollTop = 0;
     });
   });
 

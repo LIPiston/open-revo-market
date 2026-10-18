@@ -118,10 +118,15 @@ html, body {
 
 body { user-select: none; -webkit-user-select: none; }
 
+/* #app 必须显式撑满：它是 .mkt 的父节点，少了这一层 `.mkt { height:100% }`
+ * 会退化成 auto，.mkt-body 的 overflow:auto 就永远不触发
+ * （实测 scrollHeight == clientHeight，插件一多整页滚不动）。 */
+#app { height: 100%; min-height: 0; display: flex; flex-direction: column; }
+
 .mkt {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  flex: 1 1 0%;
   min-height: 0;
   gap: 10px;
   padding: 12px 14px 14px;
@@ -554,6 +559,44 @@ html[data-theme="mono"] .mkt-btn.danger {
   color: var(--text-dim);
 }
 .mkt-footer b { color: var(--text-muted); font-weight: 600; }
+
+/* ----------------------------------------------------------------- pager */
+/* 翻页 + 滚动条两条路都留着：滚动条是连续浏览，翻页是「一段一段」看，
+ * 长目录里后者更省事。两者独立，不互相依赖。 */
+.mkt-pager {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.mkt-pager .spacer { flex: 1 1 auto; }
+.mkt-pager .pg {
+  min-width: 26px;
+  height: 24px;
+  padding: 0 7px;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  background: var(--surface-pill);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all .15s ease;
+}
+.mkt-pager .pg:hover:not(:disabled) { color: var(--text-primary); background: var(--surface-pill-hover); }
+.mkt-pager .pg.active {
+  color: var(--text-primary);
+  background: var(--surface-card-active);
+  border-color: var(--border-highlight);
+  font-weight: 700;
+}
+.mkt-pager .pg:disabled { opacity: .35; cursor: not-allowed; }
+.mkt-pager .pg-gap { padding: 0 4px; color: var(--text-dim); }
+.mkt-pager .pg-info { font-variant-numeric: tabular-nums; }
 
 .mkt-toast {
   position: fixed;
