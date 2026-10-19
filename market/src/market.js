@@ -16,10 +16,10 @@
  *
  * 已核实的 IPC 签名（参数名逐字取自 exe 命令注册表，勿按文档臆改）：
  *   install_plugin_from_url { id, url, subpath?, sha256? }  // id 必需，决定安装目录名
- *   uninstall_plugin        { pluginId }                // 移入回收站
+ *   uninstall_plugin        { id }                     // 同 install：字段叫 id，不是 pluginId
  *   reload_plugins          ()                          // 重扫目录，返回插件列表
- *   get_plugin_manifest     { pluginId }
- *   set_plugin_enabled_unified { pluginId, enabled }
+ *   get_plugin_manifest     { id }                     // 同族命令统一用 id（未单独实测，见下）
+ *   set_plugin_enabled_unified { id, enabled }         // 未实测：本市场当前不调用
  *   open_external_url       { url }                     // 仅 http/https
  *   write_clipboard         { text }
  * ========================================================================== */
@@ -503,6 +503,23 @@ async function installEntry(entry) {
   }
 }
 
+/** 发一条「以插件 id 为键」的 IPC。
+ *
+ *  `install_plugin_from_url` 与 `uninstall_plugin` 都经真机 serde 报错确认字段名是 **`id`**
+ *  （`command uninstall_plugin missing required key id`）；`pluginId` 在 exe 里只出现一次，
+ *  紧跟在 `open_custom_widget` 后面 —— 那是那条命令的字段，不是这一族的。
+ *  `get_plugin_manifest` 没单独实测过，所以失败时再试一次 `pluginId`：
+ *  serde 校验失败时宿主什么都没做，重试是安全的。
+ *  绝不同时传两个键 —— serde 会以 `unknown field` 拒收。 */
+async function invokeByPluginId(cmd, id) {
+  try {
+    return await hostInvoke(cmd, { id });
+  } catch (e) {
+    if (!/missing required key|invalid args/i.test(String((e && e.message) || e))) throw e;
+    return hostInvoke(cmd, { pluginId: id });
+  }
+}
+
 async function uninstallEntry(entry) {
   if (!(state.caps && state.caps.can_uninstall === true)) {
     throw new Error('本版宿主没有开放卸载接口');
@@ -510,7 +527,7 @@ async function uninstallEntry(entry) {
   state.busy = entry.id;
   render();
   try {
-    await hostInvoke('uninstall_plugin', { pluginId: entry.id });
+    await invokeByPluginId('uninstall_plugin', entry.id);
     await reloadPlugins(true);
     await refreshInstalled();
     toast(`已卸载 ${entry.id}（已移入回收站，可恢复）`);
@@ -550,7 +567,7 @@ async function readInstalledVersions() {
   const updates = {};
   await Promise.all(ids.map(async (id) => {
     try {
-      const m = await hostInvoke('get_plugin_manifest', { pluginId: id });
+      const m = await invokeByPluginId('get_plugin_manifest', id);
       if (m && typeof m === 'object' && m.version) updates[id] = m.version;
     } catch (_) { /* 单个插件读失败不影响其它 */ }
   }));

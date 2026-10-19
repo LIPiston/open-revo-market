@@ -79,12 +79,17 @@ get_active_background
 新宿主在这之外新增（逐字取自 exe 命令注册表，详见 `reference/host-plugin-ipc.md`）：
 
 ```
-install_plugin_from_url { id, url, subpath?, sha256? }   uninstall_plugin { pluginId }
-reload_plugins { }                                   get_plugin_manifest { pluginId }
-set_plugin_enabled_unified { pluginId, enabled }     get_plugin_host_capabilities { }
+install_plugin_from_url { id, url, subpath?, sha256? }   uninstall_plugin { id }
+reload_plugins { }                                   get_plugin_manifest { id }
+set_plugin_enabled_unified { id, enabled }           get_plugin_host_capabilities { }
 open_external_url { url }                            write_clipboard { text }
-start_plugin_service / stop_plugin_service / get_plugin_service_status { pluginId }
+start_plugin_service / stop_plugin_service / get_plugin_service_status { id }
 ```
+
+> 插件管理这族字段名是 **`id`**（install / uninstall 都有真机 serde 报错确认）；
+> 而 `load_plugin_html` / `load_plugin_theme_css` / `load_plugin_background_css`
+> 用的是 **`pluginId`**（前端 JS 实测）。**两族不能互相套用**。
+> 服务类三条沿同族约定但未单独实测。
 
 **插件代码绝不能按版本号分支** —— 两代报同一个版本号。正确做法是探测
 `get_plugin_host_capabilities`，命令不存在就降级（市场就是这么做的）。

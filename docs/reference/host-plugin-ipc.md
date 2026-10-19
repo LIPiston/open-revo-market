@@ -24,15 +24,22 @@ mtime 2026-10-18 17:03）新增的插件相关 IPC。
 |---|---|---|---|
 | `get_plugin_host_capabilities` | — | `host_version` + `can_*` 能力位 | 见 §2 |
 | `install_plugin_from_url` | `id`, `url`, `subpath?`, `sha256?` | 安装结果 | 下载 + 校验 + 解压 + 落盘 + 热重载 |
-| `uninstall_plugin` | `pluginId` | 布尔 | 停服务 → 清配置 → 移入**回收站** |
+| `uninstall_plugin` | `id` ✅真机 | 布尔 | 停服务 → 清配置 → 移入**回收站** |
 | `reload_plugins` | — | 插件列表 | 重扫插件目录 |
-| `get_plugin_manifest` | `pluginId` | manifest 原文 | 读已装插件的清单 |
-| `set_plugin_enabled_unified` | `pluginId`, `enabled` | 布尔 | skin/background/其它统一开关 |
+| `get_plugin_manifest` | `id` ⚠️未单独实测 | manifest 原文 | 读已装插件的清单 |
+| `set_plugin_enabled_unified` | `id`, `enabled` ⚠️未实测 | 布尔 | skin/background/其它统一开关 |
 | `open_external_url` | `url` | 布尔 | 系统浏览器打开（仅 http/https） |
 | `write_clipboard` | `text` | 布尔 | 宿主代写剪贴板 |
-| `start_plugin_service` | `pluginId` | 服务状态 | 拉起伴随服务 |
-| `stop_plugin_service` | `pluginId` | 服务状态 | 停止伴随服务 |
-| `get_plugin_service_status` | `pluginId` | 服务状态 | 查询运行状态 |
+| `start_plugin_service` | `id` ⚠️未实测 | 服务状态 | 拉起伴随服务 |
+| `stop_plugin_service` | `id` ⚠️未实测 | 服务状态 | 停止伴随服务 |
+| `get_plugin_service_status` | `id` ⚠️未实测 | 服务状态 | 查询运行状态 |
+
+> ⚠️ **注意两族命令的字段名不一样。** 插件管理这族用 **`id`**（`install` / `uninstall`
+> 都经真机 serde 报错确认过）；而 `load_plugin_html` / `load_plugin_theme_css` /
+> `load_plugin_background_css` 用的是 **`pluginId`**（从 0.9.1 前端 JS 实测）。
+> 别把两族的字段名互相套用 —— `pluginId` 在整个 exe 里只出现一次（紧跟
+> `open_custom_widget`），那属于那条命令，不是插件管理族的。
+> 服务类三条的字段名沿用同族约定但**没有单独实测**，已在表里标出。
 
 > ⚠️ **`restart_plugin_service` 不存在。** 第三方文档里写了这一条，但 exe 里
 > `restart_plugin` 全 0 命中，也不在分发比较链里。要重启只能 stop + start。
@@ -53,6 +60,32 @@ command install_plugin_from_url missing required key id
 **不能证明「这条命令只有这些字段」**。必需字段要另找证据 ——
 宿主的 serde 报错正是最硬的证据（`missing required key <名字>`）。
 所以「0 命中 ≠ 不存在」这条要再加半句：**「命中了的也只是全部字段的一个子集」**。
+
+### 1.2 同一族里「只出现一次的字段」属于谁
+
+`pluginId` 在整个 exe 里**只出现一次**，位置是：
+
+```
+open_custom_widget | pluginId
+```
+
+它紧跟在 `open_custom_widget` 后面 —— 那是那条命令的字段。而
+`load_plugin_html` / `load_plugin_theme_css` / `load_plugin_background_css`
+的 `pluginId` 来自 0.9.1 前端 JS（实测调用点），属于另一族。
+
+插件管理这族（install / uninstall / manifest）用的是 **`id`**，这一点由真机报错确认：
+
+```
+invalid args `id` for command `uninstall_plugin`:
+command uninstall_plugin missing required key id
+```
+
+**这是同一个盲区踩的第三次**：第一次漏了 `id`（安装），第二次把仓库内路径当
+`subpath`（安装），第三次把 `pluginId` 当卸载字段名。三次的共同点是
+**拿「某个名字在某处出现过」当成「它属于这条命令」**。
+
+> 判据升级：一个字段名要认定为某命令的参数，需要**该命令自己的**证据 ——
+> serde 报错、前端调用点、或 README 里的示例。exe 里「邻近出现过」不算。
 
 ## 2. `HostCapabilities` 结构
 

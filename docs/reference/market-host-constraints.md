@@ -9,11 +9,11 @@
 > | 新宿主新增（在 exe 命令表逐字核实） | 本页对应结论 |
 > |---|---|
 > | `install_plugin_from_url { id, url, subpath?, sha256? }` | §2「没有安装 IPC」→ **已有** |
-> | `uninstall_plugin { pluginId }`（移入回收站） | 同上 → **已有** |
-> | `reload_plugins`、`get_plugin_manifest { pluginId }` | 同上 → **已有** |
+> | `uninstall_plugin { id }`（移入回收站） | 同上 → **已有** |
+> | `reload_plugins`、`get_plugin_manifest { id }` | 同上 → **已有** |
 > | `get_plugin_host_capabilities` → `host_version` + `can_*` 能力位 | 按版本号判断 → **改为运行时探测** |
 > | `open_external_url { url }`、`write_clipboard { text }` | 沙盒限制 → **可由宿主代劳** |
-> | `set_plugin_enabled_unified { pluginId, enabled }` | 语义分叉 → **已统一** |
+> | `set_plugin_enabled_unified { id, enabled }` | 语义分叉 → **已统一** |
 >
 > **仍成立的部分**：`tab` iframe 的 sandbox 依然没有 `allow-downloads` / `allow-popups` / `allow-modals`
 > （所以下载与 `window.open` 仍被拦、`window.confirm` 仍会静默返回 false），

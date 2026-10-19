@@ -52,6 +52,7 @@ const CALLS = [];
 // 市场自己 catch 了异常只弹 toast，不产生未捕获错误，光看 errors 是发现不了的。
 const MOCK_ERRORS = [];
 const INSTALL_ARGS = [];
+const UNINSTALL_ARGS = [];
 // ?host=old 模拟没有安装接口的老宿主（0.9.1）：get_plugin_host_capabilities 直接 reject。
 // 默认模拟新宿主：能力位齐全、安装/卸载/重载都返回成功。
 const HOST_MODE = params.get('host') || 'new';
@@ -135,8 +136,33 @@ window.__TAURI_INTERNALS__ = {
       }
       return { id: a.id, name: a.id, installed: true, dir };
     }
-    if (cmd === 'uninstall_plugin') return true;
-    if (cmd === 'get_plugin_manifest') return { id: 'plugin-market', version: '1.1.0' };
+    if (cmd === 'uninstall_plugin') {
+      const a = args || {};
+      // 真机实测：uninstall_plugin 的必需字段也是 id。
+      //   invalid args `id` for command `uninstall_plugin`: missing required key id
+      // pluginId 只出现在 open_custom_widget 旁边，不是这一族的字段。
+      if (!a.id && a.pluginId) {
+        MOCK_ERRORS.push('uninstall_plugin 用了 pluginId（宿主字段是 id）');
+        throw new Error('invalid args `pluginId` for command `uninstall_plugin`: ' +
+          'unknown field `pluginId`, expected `id`');
+      }
+      if (!a.id) {
+        MOCK_ERRORS.push('missing required key id');
+        throw new Error('invalid args `id` for command `uninstall_plugin`: ' +
+          'command uninstall_plugin missing required key id');
+      }
+      UNINSTALL_ARGS.push(a);
+      return true;
+    }
+    if (cmd === 'get_plugin_manifest') {
+      const a = args || {};
+      if (!a.id && !a.pluginId) {
+        MOCK_ERRORS.push('get_plugin_manifest 缺 id');
+        throw new Error('invalid args `id` for command `get_plugin_manifest`: ' +
+          'command get_plugin_manifest missing required key id');
+      }
+      return { id: a.id || a.pluginId, version: '1.1.0' };
+    }
     if (cmd === 'write_clipboard' || cmd === 'open_external_url') return true;
     return { ok: true, cmd };
   },
@@ -359,7 +385,7 @@ async function exercisePaging() {
   };
 }
 
-/** 卸载也演练一次：确认走 uninstall_plugin 且带对 pluginId。 */
+/** 卸载也演练一次：确认走 uninstall_plugin、字段名是 id、且弹窗正常关闭。 */
 async function exerciseUninstall() {
   const w = f.contentWindow;
   const d = w.document;
@@ -374,12 +400,19 @@ async function exerciseUninstall() {
   if (!go) return { uninstall: 'no confirm button' };
 
   const before = CALLS.length;
+  const errBefore = MOCK_ERRORS.length;
   go.click();
   await new Promise((r) => setTimeout(r, 600));
   const calls = CALLS.slice(before).filter((c) => c[0] === 'uninstall_plugin');
+  const toastEl = d.getElementById('toast');
   return {
     uninstall: calls.length ? 'invoked' : 'not-invoked',
-    pluginId: calls.length ? (calls[0][1] || {}).pluginId : null,
+    // 字段名必须是 id —— 传 pluginId 时宿主报 missing required key id
+    args: calls.length ? (calls[0][1] || null) : null,
+    // 弹窗还在 = uninstallEntry 抛了（market 自己 catch 后只弹 toast）
+    stillOpen: !!d.querySelector('.mkt-scrim'),
+    toast: toastEl ? toastEl.textContent.slice(0, 120) : null,
+    mockErrors: MOCK_ERRORS.slice(errBefore),
   };
 }
 

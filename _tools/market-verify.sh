@@ -46,6 +46,7 @@ run_one() {
   local cat_rel="${2:-../market/catalog.json}"   # 预览页里的相对路径
   local cat_file="${3:-$ROOT/market/catalog.json}"
   local suffix="${4:-}"
+  local skip_uninst="${5:-}"
   local tag="$THEME-$host$suffix"
   # catalog=local：把市场对在线目录的 fetch 劫持到仓库里的 market/catalog.json。
   # 不这样做，验收测的是 GitHub 上的旧目录 —— 本地改了目录但还没 push 时等于没测。
@@ -66,11 +67,12 @@ run_one() {
   size=$(stat -c%s "$OUT/market-$tag.png" 2>/dev/null || echo 0)
   echo "=== host=$host  shot: _shots/market-$tag.png ($size bytes) ==="
 
-  python - "$OUT/market-$tag.dom.html" "$host" "$cat_file" <<'PY'
+  python - "$OUT/market-$tag.dom.html" "$host" "$cat_file" "$skip_uninst" <<'PY'
 import json, re, sys, html
 d = open(sys.argv[1], encoding='utf-8', errors='replace').read()
 host = sys.argv[2]
 catalog_path = sys.argv[3]
+SKIP_UNINSTALL = bool(sys.argv[4]) if len(sys.argv) > 4 else False
 m = re.search(r'<pre id="diag"[^>]*>(.*?)</pre>', d, re.S)
 if not m:
     print("diag: NOT FOUND —— 预览页没跑起来"); sys.exit(2)
@@ -143,6 +145,31 @@ if host == 'new':
 else:
     install_ok = inst.get('mode') == 'legacy' and inst.get('install') == 'modal-open' and inst.get('hasCmd')
 
+# 卸载：新宿主必须真的发出 uninstall_plugin，参数字段名是 id（不是 pluginId），
+# 且弹窗关闭、宿主没拒收。老宿主没有卸载接口（按钮 disabled），这里只要求「没有误发」。
+if host == 'new':
+    ua = uninst.get('args') or {}
+    # 分页轮次用的是伪造条目（host 已装列表里没有它们），卡片上本来就没有卸载按钮 ——
+    # 那一轮只验滚动与翻页，卸载判据跳过。
+    if uninst.get('uninstall') == 'no button':
+        uninstall_ok = bool(SKIP_UNINSTALL)
+    else:
+        uninstall_ok = (
+            uninst.get('uninstall') == 'invoked'
+            and ua.get('id')
+            and not ua.get('pluginId')
+            and uninst.get('stillOpen') is False
+            and not (uninst.get('mockErrors') or [])
+        )
+    if uninst.get('mockErrors'):
+        print("卸载被宿主拒收：", uninst['mockErrors'])
+    if uninst.get('stillOpen'):
+        print("卸载弹窗未关闭 —— uninstallEntry 抛了：", uninst.get('toast'))
+    print("uninstall_args:", ua, "uninstall_ok=", uninstall_ok)
+else:
+    uninstall_ok = uninst.get('uninstall') in ('disabled', 'no button', None)
+    print("uninstall:", uninst, "uninstall_ok=", uninstall_ok)
+
 # 滚动与翻页：条目超过一页时必须**真的**能滚、能翻。
 # 反例是实测出来的：#app 没设 height 时 .mkt 退化成 auto，
 # .mkt-body 的 scrollHeight == clientHeight，一屏塞不下就整页卡死。
@@ -175,13 +202,15 @@ fail = (
     or j.get('cards', 0) != want_cards
     or bool(errs)
     or not install_ok
+    or not uninstall_ok
     or not scroll_ok
     or not paging_ok
     or live.get('live') != 'clicked'
     # mono 下徽标必须去饱和；cyber 下不强求（themeOk 默认 True）
     or not j.get('themeOk')
 )
-print(f"install_ok={install_ok} scroll_ok={scroll_ok} paging_ok={paging_ok}")
+print(f"install_ok={install_ok} uninstall_ok={uninstall_ok} "
+      f"scroll_ok={scroll_ok} paging_ok={paging_ok}")
 print("RESULT:", "FAIL" if fail else "PASS")
 sys.exit(1 if fail else 0)
 PY
@@ -209,7 +238,7 @@ out['plugins'] = [dict(base, id=f'bulk-{i:02d}', name=f'批量条目 {i:02d}',
 json.dump(out, open(sys.argv[2], 'w', encoding='utf-8'), ensure_ascii=False)
 PY
 echo "=== 分页/滚动专项（30 条，每页 12）==="
-run_one new "../_shots/_big-catalog.json" "$BIG" "-paged" || rc=1
+run_one new "../_shots/_big-catalog.json" "$BIG" "-paged" "skip-uninstall" || rc=1
 rm -f "$BIG" "$OUT/market-$THEME-new-paged.png" "$OUT/market-$THEME-new-paged.dom.html"
 
 if [ "$rc" -eq 0 ]; then echo "ALL PASS ($THEME)"; else echo "FAILED ($THEME)"; fi

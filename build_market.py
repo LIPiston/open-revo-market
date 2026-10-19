@@ -123,9 +123,26 @@ def sanity_checks(html: str) -> list[str]:
         if cap not in js_src:
             problems.append(f"没有使用能力位 {cap}")
 
-    # 安装/卸载参数名必须与宿主命令表逐字一致，写错就是运行时 no-op
-    if "pluginId" not in js_src:
-        problems.append("uninstall_plugin 的参数名必须是 pluginId（宿主 serde 字段）")
+    # 这一族「以插件 id 为键」的命令（install / uninstall / get_plugin_manifest）
+    # 字段名都是 **id**。真机报错过两次：
+    #   install_plugin_from_url missing required key id
+    #   uninstall_plugin       missing required key id
+    # pluginId 在 exe 里只出现一次、紧跟 open_custom_widget，是那条命令的字段。
+    #
+    # 检查的是 invokeByPluginId 的函数体：**首选分支必须是 { id }**，
+    # pluginId 只能出现在 catch 里的兜底重试。校验调用点没用 ——
+    # 调用点传的是裸 id（invokeByPluginId(cmd, id)），字段名在函数体里才定。
+    mfn = re.search(r"function\s+invokeByPluginId\s*\([^)]*\)\s*\{(.*?)\n\}", js_src, re.S)
+    if not mfn:
+        problems.append("找不到 invokeByPluginId()，无法校验插件 id 类的参数名")
+    else:
+        body = mfn.group(1)
+        trypos = body.find("catch")
+        primary = body if trypos < 0 else body[:trypos]
+        if not re.search(r"hostInvoke\(\s*cmd\s*,\s*\{\s*id\s*\}", primary):
+            problems.append("uninstall/get_manifest 的首选参数必须是 { id }（真机 serde 字段）")
+        if re.search(r"\{[^}]*\bid\s*:[^}]*pluginId", body):
+            problems.append("不能同时传 id 与 pluginId —— serde 会以 unknown field 拒收")
     if re.search(r"expectedSha256", js_src):
         problems.append("install_plugin_from_url 的参数是 sha256，不是 expectedSha256")
 

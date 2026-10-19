@@ -746,7 +746,8 @@ j = async (S = !1) => { b(!0); try { const D = await m("get_custom_plugins") || 
 * **一键安装**：`install_plugin_from_url({ id, url: codeload 归档, subpath?, sha256? })`
   （`id` 是必需项 —— 这里当初漏了，见 §20）。
   下载/校验/解压/落盘全在宿主侧；市场不下载、不写盘。
-* **卸载**：`uninstall_plugin({ pluginId })` → 移入回收站；确认用页面内弹窗。
+* **卸载**：`uninstall_plugin({ id })` → 移入回收站；确认用页面内弹窗。
+  （字段名是 `id`，不是 `pluginId` —— 这里当初写错，见 §23。）
 * **自动重扫**：装完调 `reload_plugins`，失败退回 `get_custom_plugins`。
 * **可更新标记**：`get_plugin_manifest` 读已装版本与目录版本做语义化比较。
 * **外链/剪贴板**：优先走 `open_external_url` / `write_clipboard`，否则降级。
@@ -1091,3 +1092,71 @@ body(100%) → #app(无高度) → .mkt(height:100%) → .mkt-body(flex:1, overf
 反向验证：把 `#app` 的 `height:100%` 删掉，闸门立刻报
 `滚动失败：body 828/828 overflow=auto` → RESULT: FAIL。
 
+
+## 23. 真机第三报：`uninstall_plugin` 的字段名也是 `id`
+
+### 23.1 现象
+
+一键安装修好之后，真机点【卸载】报：
+
+```
+卸载失败: invalid args `id` for command `uninstall_plugin`:
+command uninstall_plugin missing required key id
+```
+
+### 23.2 为什么又错在同一个地方
+
+我当初把 `uninstall_plugin` 的参数写成 `pluginId`，理由是「exe 里有 `pluginId` 这个串」。
+回头查才知道：**`pluginId` 在整个 exe 里只出现一次**，位置是
+
+```
+open_custom_widget | pluginId
+```
+
+它紧跟着 `open_custom_widget` —— 那是**那条命令**的字段。
+而 `load_plugin_html` / `load_plugin_theme_css` / `load_plugin_background_css`
+的 `pluginId` 是从 0.9.1 前端 JS 的调用点实测来的，属于另一族。
+
+插件管理这一族（install / uninstall / manifest / service）用的是 **`id`**。
+
+这是同一个盲区的**第三次**：
+
+| 次序 | 错误 | 事实 |
+|---|---|---|
+| #46 | install 漏了 `id` | 必需字段，决定安装目录名 |
+| #47 | `subpath` 传了仓库内路径 | 它是归档内路径 |
+| #49 | uninstall 传了 `pluginId` | 字段名是 `id` |
+
+三次的共同点：**把「这个名字在 exe 某处出现过」当成「它属于这条命令」**。
+
+### 23.3 修法
+
+新增 `invokeByPluginId(cmd, id)` 统一发这一族命令：
+
+* 首选 `{ id }`；
+* `get_plugin_manifest` 没有单独实测过，所以只在宿主以「缺字段」拒收时
+  兜底重试 `{ pluginId }` —— serde 校验失败时宿主什么都没做，重试是安全的；
+* **绝不两个键一起传**，否则会以 `unknown field` 被拒。
+
+### 23.4 闸门：这次终于真的断言了卸载
+
+之前的验收对卸载只做 `print(uninstall)`，**从没断言过**。所以 mock 里
+`uninstall_plugin` 也只是 `return true`，任何参数都算成功 —— 又一个「mock 比真宿主松」。
+
+现在：
+
+* mock 传 `pluginId` 直接抛 `unknown field 'pluginId', expected 'id'`；
+* 验收新增 `uninstall_ok`：必须 invoked、`args.id` 存在、无 `pluginId`、弹窗关闭、无 mockErrors；
+* 分页专项轮次用伪造条目（卡片上没有卸载按钮），显式跳过这条判据；
+* `build_market.py` 检查 `invokeByPluginId` 的**函数体**而不是调用点 ——
+  调用点传的是裸 `id`，字段名在函数体里才定；已反向验证（改成 `{ pluginId }` 立刻构建失败）。
+
+### 23.5 判据升级
+
+> 一个字段名要认定为某命令的参数，需要**该命令自己的**证据：
+> serde 报错、前端调用点、或官方示例。
+> exe 里「邻近出现过」不算 —— 编译器会把相同字符串去重到别处，
+> 而同一个名字也可能属于完全不同的命令。
+
+服务类三条（`start/stop/get_plugin_service_status`）的字段名沿用同族约定，
+但**没有单独实测**，文档里已明确标注。
