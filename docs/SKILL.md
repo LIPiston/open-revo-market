@@ -204,6 +204,10 @@ docs\
 ├── SKILL.md                              # 本文件：状态 + 硬约束 + 工作流 + 验收
 ├── devlog.md                             # 开发记录：时间线 + 每步数字证据 + 未决项
 ├── README.md                             # 文档与技能包怎么用、维护约定
+├── market.md                             # 插件市场完整说明（人读版，与本文 §3 同源）
+├── host-and-plugins.md                   # 插件生态实测（人读版，与本文 §1 同源）
+├── project-status.md                     # 已知边界 + 命名沿革
+├── removed-skins.md                      # 已移除皮肤/背景链留档（= 本文 §4）
 ├── OpenRevo_第三方插件开发手册.md          # 官方手册 v1.0（存档 ≠ 行为准则）
 └── reference\
     ├── plugin-dev-0.8.8-skill.md         # 官方新版 Skill（0.8.8）逐条实测对照

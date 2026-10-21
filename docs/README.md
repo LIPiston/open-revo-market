@@ -16,6 +16,10 @@ docs\
 ├── README.md                            # 本文件
 ├── SKILL.md                             # 技能入口：状态 + 硬约束 + 工作流 + 验收清单 + 参考地图
 ├── devlog.md                            # 开发记录（时间线 + 证据 + 未决项）
+├── market.md                            # 插件市场完整说明：能力 / 降级 / 构建 / 预览 / 验收闸
+├── host-and-plugins.md                  # 插件生态实测：五种形态 / sandbox / 两代宿主 IPC
+├── project-status.md                    # 已知边界 + 命名沿革
+├── removed-skins.md                     # 已移除的皮肤与背景链留档
 ├── OpenRevo_第三方插件开发手册.md         # 官方手册 v1.0 存档（存档 ≠ 行为准则）
 └── reference\
     ├── host-plugin-ipc.md                # **当前宿主**新增的插件 IPC：安装/卸载/能力位（9,437,696 B 实测）
