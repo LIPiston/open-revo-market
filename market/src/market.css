@@ -302,7 +302,7 @@ html[data-theme="mono"] .mkt-btn.danger {
 .mkt-card.installed { border-color: color-mix(in srgb, var(--status-ok) 45%, transparent); }
 .mkt-card.busy { opacity: .72; pointer-events: none; }
 
-/* 老宿主没有安装 IPC 时，卡片底部明说「只能给命令」，避免点下去才发现做不到 */
+/* 宿主没有安装 IPC 时，卡片底部明说「只能给命令」，避免点下去才发现做不到 */
 .mkt-card-hint {
   display: flex; align-items: center; gap: 5px;
   font-size: 10.5px; line-height: 1.4; color: var(--text-dim);
@@ -548,6 +548,27 @@ html[data-theme="mono"] .mkt-btn.danger {
 .mkt-note svg { width: 12px; height: 12px; flex-shrink: 0; margin-top: 2px; color: var(--status-warn); }
 .mkt-note.plain { background: var(--surface-sunken); border-color: var(--border-subtle); }
 .mkt-note.plain svg { color: var(--text-dim); }
+
+/* 安装弹窗里的可选开关（当前只有「走加速下载」一项）。
+   用 accent-color 跟主题走，不做自定义方块 —— 换主题时不必再调一遍。 */
+.mkt-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.mkt-check input[type="checkbox"] {
+  flex-shrink: 0;
+  width: 13px;
+  height: 13px;
+  margin: 1px 0 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.mkt-check span b { color: var(--text-secondary); font-weight: 600; }
 
 /* --------------------------------------------------------------- disclaimer */
 .mkt-footer {

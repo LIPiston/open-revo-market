@@ -3,12 +3,16 @@
 # 不需要 clone 仓库：默认从 GitHub 拉取 main 分支的现成产物（plugin-market/），
 # 解压后复制到 %APPDATA%\OpenRevo\plugins\plugin-market\，然后自校验。
 #
+# 下载默认走 gh-proxy.com 加速（国内直连 GitHub 常常超时）；加速失败会自动回退直连。
+#
 # 用法：
 #   powershell -NoProfile -ExecutionPolicy Bypass -File _tools\install-market.ps1
 #   ... -Local            从本仓库已入库的 plugin-market\ 安装（离线、可控）
 #   ... -From <目录>      从指定目录安装（一般用于本地构建后验证）
 #   ... -DryRun           只打印将要做什么，不下载、不写盘
 #   ... -Repo owner/name  换仓库（默认 LIPiston/open-revo-market）
+#   ... -Direct           不走加速，直连 GitHub
+#   ... -Proxy <前缀>     换加速前缀（默认 https://gh-proxy.com/）
 #
 # 安装完：打开 OpenRevo → 侧边栏【插件】页 → 右上角【刷新】→ 顶栏出现「插件市场」页签。
 #
@@ -21,15 +25,20 @@ $ErrorActionPreference = 'Stop'
 
 $Local  = $args -contains '-Local'
 $DryRun = $args -contains '-DryRun'
+$Direct = $args -contains '-Direct'
 $From   = $null
 $Repo   = 'LIPiston/open-revo-market'
+$Proxy  = 'https://gh-proxy.com/'
 
 for ($i = 0; $i -lt $args.Count; $i++) {
     switch ($args[$i]) {
         '-From'   { $From = $args[$i + 1] }
         '-Repo'   { $Repo = $args[$i + 1] }
+        '-Proxy'  { $Proxy = $args[$i + 1] }
     }
 }
+if ($Proxy -and -not $Proxy.EndsWith('/')) { $Proxy += '/' }
+if ($Direct) { $Proxy = '' }
 
 $PluginId = 'plugin-market'
 # $PSScriptRoot 只在「作为文件运行」时才有值；用 irm | iex 这种一行式执行时它是空的。
@@ -56,6 +65,8 @@ elseif ($Local) {
 }
 else {
     Write-Output ("来源 : https://github.com/" + $Repo + " （main 分支现成产物）")
+    if ($Proxy) { Write-Output ("加速 : " + $Proxy + "（失败自动回退直连）") }
+    else { Write-Output "加速 : 已关闭（-Direct）" }
 }
 
 Write-Output ("目标 : " + $Dest)
@@ -85,10 +96,27 @@ try {
         New-Item -ItemType Directory -Path $TempDir -Force | Out-Null
         $NeedCleanup = $true
 
-        $Url = 'https://codeload.github.com/' + $Repo + '/zip/refs/heads/main'
-        Write-Output ('下载 : ' + $Url)
+        $DirectUrl = 'https://codeload.github.com/' + $Repo + '/zip/refs/heads/main'
+        # 加速前缀 + 原始地址；gh-proxy 支持把完整 GitHub URL 直接拼在后面。
+        $Urls = @()
+        if ($Proxy) { $Urls += ($Proxy + $DirectUrl) }
+        $Urls += $DirectUrl
+
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-        Invoke-WebRequest -Uri $Url -OutFile $Zip -UseBasicParsing
+        $Got = $false
+        foreach ($Url in $Urls) {
+            Write-Output ('下载 : ' + $Url)
+            try {
+                Invoke-WebRequest -Uri $Url -OutFile $Zip -UseBasicParsing -TimeoutSec 120
+                if ((Get-Item -LiteralPath $Zip).Length -lt 1000) { throw '下载内容过小，可能不是归档。' }
+                $Got = $true
+                break
+            }
+            catch {
+                Write-Output ('  失败：' + $_.Exception.Message)
+            }
+        }
+        if (-not $Got) { throw ('全部下载地址都失败，请检查网络，或用 -Local 安装本地产物。') }
 
         Write-Output '解压 ...'
         Expand-Archive -LiteralPath $Zip -DestinationPath $Unzip -Force

@@ -67,7 +67,7 @@ invoke('install_plugin_from_url', { id, url, subpath, sha256? })   // id 与 url
 > 若某天接入非 GitHub 的归档源，这条规则要重新确认。弹窗里始终保留「复制命令」的手动备用路径。
 
 取证细节（含命令注册表与安装器的错误串）见 [`../docs/reference/host-plugin-ipc.md`](../docs/reference/host-plugin-ipc.md)；
-老宿主（完全没有安装 IPC）的基线在 [`../docs/reference/market-host-constraints.md`](../docs/reference/market-host-constraints.md)。
+`tab` 形态的沙盒能力边界见 [`../docs/host-and-plugins.md`](../docs/host-and-plugins.md)。
 
 ---
 

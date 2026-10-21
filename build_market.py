@@ -115,7 +115,7 @@ def sanity_checks(html: str) -> list[str]:
     if 'plugin_type' not in read(SRC / "market.js"):
         problems.append("未使用 plugin_type —— v0.9.1 的权威键是 plugin_type")
 
-    # 能力探测必须在，而且不能按版本号猜 —— 老宿主报的版本号和新宿主一样
+    # 能力探测必须在，而且不能按版本号猜 —— 有无安装接口与版本号字符串无关
     js_src = read(SRC / "market.js")
     if "get_plugin_host_capabilities" not in js_src:
         problems.append("没有调用 get_plugin_host_capabilities，无法按宿主能力降级")

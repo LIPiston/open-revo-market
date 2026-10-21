@@ -16,8 +16,8 @@
 
 ## 2. 安装方式由宿主能力决定
 
-宿主分两代，能力差别很大，所以市场**启动时探测** `get_plugin_host_capabilities`，
-按返回的能力位决定 UI，**不按版本号猜**（两代宿主的版本号字符串相同）：
+市场**启动时探测** `get_plugin_host_capabilities`，按返回的能力位决定 UI，
+**不按版本号猜**（有无安装 IPC 的版本可能报同一个版本号）：
 
 | 能力位 | 为真时 | 为假 / 命令不存在时 |
 |---|---|---|
@@ -33,9 +33,9 @@
 > 目录条目没带 `sha256` 时只能校验传输完整性，**证明不了内容没被篡改**。
 > 想升级为可验证安装，给 `catalog.json` 条目补 `sha256`（校验器 E11 会检查形状）。
 
-一键安装的参数链 `{ id, url, subpath }` 已在真机上逐层校订：`subpath` 是**归档内**路径
+一键安装的参数链是 `{ id, url, subpath }`：`subpath` 是**归档内**路径
 （GitHub codeload 的 zip 解压后固定多一层 `<repo>-<branch>/`，宿主不会剥）。
-构造逻辑在 `archiveSubpath()`，取证见 [`reference/host-plugin-ipc.md`](reference/host-plugin-ipc.md) §3.1。
+构造逻辑在 `archiveSubpath()`，说明见 [`reference/host-plugin-ipc.md`](reference/host-plugin-ipc.md) §4。
 
 ## 3. 目录与发现机制
 
@@ -101,7 +101,7 @@ python -m http.server 8791
 | 参数 | 作用 |
 |---|---|
 | `?theme=cyber\|mono\|light` | 模拟宿主主题 |
-| `?host=new\|old` | 模拟新宿主（能力齐全）或老宿主（无安装 IPC） |
+| `?host=new\|old` | 模拟能力齐全的宿主，或缺少安装 IPC 的宿主 |
 | `?catalog=local` | 把在线目录 URL 改写成本地 `market/catalog.json` |
 | `?modal=1` | 自动打开安装弹窗供出图 |
 | `?nodiag=1` | 隐藏诊断浮层，供人眼检查版式 |
@@ -115,24 +115,49 @@ bash _tools/market-verify.sh cyber                      # 验收闸
 bash _tools/market-verify.sh mono                       # 另一套主题
 ```
 
-`market-verify.sh` 默认跑 **两代宿主 mock**，断言：
+`market-verify.sh` 默认跑 **两种宿主 mock**（能力齐全 / 无安装 IPC），断言：
 
 * `ready` 为真，**卡片数精确等于本地 `market/catalog.json` 的条数**（不是「> 0」——
   否则「目录整个拉丢了」和「目录真的只有 1 条」看起来一样）；
 * **JS 错误为 0**；
-* 新宿主：点【安装】→ 弹窗 → 点【立即安装】→ 真发 `install_plugin_from_url`，
+* 能力齐全：点【安装】→ 弹窗 → 点【立即安装】→ 真发 `install_plugin_from_url`，
   且 `usedNativeConfirm === false`（防止有人改回 `window.confirm`）；
-* 新宿主：`uninstall_ok` —— `uninstall_plugin` 真被调用、参数是 `id` 且无 `pluginId`、弹窗关闭；
-* 老宿主：弹窗打开且给出含 `plugins` 路径的可粘贴命令；
+* 能力齐全：`uninstall_ok` —— `uninstall_plugin` 真被调用、参数是 `id` 且无 `pluginId`、弹窗关闭；
+* 无安装 IPC：弹窗打开且给出含 `plugins` 路径的可粘贴命令；
 * 「实时发现」能点且不抛异常；
 * mono 下类型徽标去饱和（`sat < 0.12`），且**必须真的取到徽标** —— 取不到算失败。
+
+另外还有**两轮专项**：
+
+* **加速开关**（`?proxy=1`）：勾上后 `install_plugin_from_url` 的 `url` 必须带
+  `https://gh-proxy.com/` 前缀；不勾时必须不带。两条都测，否则「开关画了没接线」
+  和「默认偷偷走代理」都验不出来。
+* **分页/滚动**（30 条临时目录）：滚动容器真的可滚、翻页真的能翻且回顶部。
 
 > 走 **HTTP 而非 `file://`**：真实宿主里插件文档 origin 是 `tauri://localhost`（CORS 语义），
 > `file://` 下 `fetch` 直接被拒，会让「目录能拉下来」这条路径永远测不到。
 
-当前基线：cyber 与 mono 双主题 × 新旧两代宿主，**四个组合全 PASS**，0 JS 错误。
+当前基线：cyber 与 mono 双主题 × 两种宿主 mock + 加速专项，**六轮全 PASS**，0 JS 错误。
 
-## 8. 安装 / 停用 / 卸载
+## 8. 下载链路与加速
+
+国内直连 GitHub 常常超时，所以下载链路有两种走法。加速服务是 **gh-proxy.com**：
+把完整 GitHub URL 拼在 `https://gh-proxy.com/` 后面即可。
+
+| 链路 | 默认行为 |
+|---|---|
+| 拉目录 `market/catalog.json` | 直连 → 加速 → jsDelivr，依次尝试 |
+| 「实时发现」（GitHub 搜索 API） | 直连 → 加速 |
+| 一键安装（宿主下载归档） | **默认直连**，弹窗里有「走 gh-proxy 加速」勾选框 |
+| 手动 `git clone` 备用命令 | 直接给加速地址（不通可去掉前缀） |
+| `_tools/install-market.ps1` | 走加速，**失败自动回退直连**；`-Direct` 强制直连 |
+
+**一键安装为什么默认不加速**：加速后的归档实测仍以 `<repo>-<branch>/` 为根目录，
+所以 `subpath` 语义不变；但宿主是否接受 GitHub 之外的下载域名**尚未实测**。
+所以做成显式开关，并在弹窗里写明「若报安全策略错误，关掉这个开关用直连重试」——
+不把未验证的路径设成默认。
+
+## 9. 安装 / 停用 / 卸载
 
 * **安装（推荐）**：一条命令，无需 clone 仓库：
 
@@ -140,9 +165,15 @@ bash _tools/market-verify.sh mono                       # 另一套主题
   irm https://raw.githubusercontent.com/LIPiston/open-revo-market/main/_tools/install-market.ps1 | iex
   ```
 
-  脚本从 codeload 拉取 main 分支的 `plugin-market/`，剥掉 `<repo>-<branch>/` 包装层后
+  脚本拉取 main 分支的 `plugin-market/`，剥掉 `<repo>-<branch>/` 包装层后
   复制到 `%APPDATA%\OpenRevo\plugins\plugin-market\`，并**自校验** `manifest.json` 的 `id`
   与 `index.html` 的完整性（少于 20 KB 直接判失败）。已有旧版会被覆盖。
+
+  直连 raw.githubusercontent 打不开时，可用同样的加速形式取脚本：
+
+  ```powershell
+  irm https://gh-proxy.com/https://raw.githubusercontent.com/LIPiston/open-revo-market/main/_tools/install-market.ps1 | iex
+  ```
 
 * **从源码安装**：`python build_market.py --install`（改过 `market/src/` 时用这条）。
 * **停用**：插件面板里拨回开关，宿主立刻移除注入内容。

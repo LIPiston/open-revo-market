@@ -2,7 +2,7 @@
  * OpenRevo 插件市场 · 应用逻辑
  * 由 build_market.py 内联进 plugin-market/index.html。
  *
- * 宿主约束（详见 docs/reference/market-host-constraints.md）：
+ * 宿主约束（详见 docs/host-and-plugins.md）：
  *  1. `tab` 插件跑在 `srcDoc` iframe（sandbox=allow-scripts allow-forms allow-same-origin），
  *     与宿主**同源** → 可访问 window.parent.__TAURI_INTERNALS__.invoke 与父文档 DOM。
  *  2. 该 iframe **没有** allow-downloads / allow-popups → 下载与 window.open 全部被拦，
@@ -28,16 +28,24 @@
 
 /* ------------------------------------------------------------------ config */
 const CONFIG = {
+  // gh-proxy.com 加速前缀：拼在完整 GitHub URL 前面（它按路径代理 github 系域名）。
+  // 国内直连 raw.githubusercontent / api.github.com 常常超时，所以每个 GitHub 请求都留了
+  // 「直连 → 加速」两条链路：直连失败自动换加速，两条都不行才算失败。
+  proxyPrefix: 'https://gh-proxy.com/',
   // 目录（catalog.json）来源，按顺序尝试，第一个成功即用。
   catalogUrls: [
     'https://raw.githubusercontent.com/LIPiston/open-revo-market/main/market/catalog.json',
+    'https://gh-proxy.com/https://raw.githubusercontent.com/LIPiston/open-revo-market/main/market/catalog.json',
     'https://cdn.jsdelivr.net/gh/LIPiston/open-revo-market@main/market/catalog.json',
   ],
+  searchUrl: 'https://api.github.com/search/repositories',
   // 收录用的 GitHub topic。作者给自己的插件仓库打上它就自动进市场。
   topic: 'openrevo-plugin',
   // 无第三方 API key 时 GitHub 搜索限额 10 次/分钟，做防抖与结果缓存。
   searchDebounceMs: 450,
   catalogTtlMs: 10 * 60 * 1000,
+  // 单次请求超时。没有它，被墙的直连会挂到浏览器默认超时，界面看起来就是「卡住」。
+  requestTimeoutMs: 8000,
 };
 
 /* 内置种子：目录拉不到时（离线 / 还没跑爬虫）也保证市场不是空的。
@@ -111,10 +119,13 @@ const state = {
   installed: new Set(),  // 已安装插件 id（来自宿主 get_custom_plugins）
   installedMeta: {},     // id -> { plugin_type, enabled }
   hostInfo: null,        // { hasBridge: boolean, error: string|null }
-  // 宿主能力位。null = 还没探测到（老宿主没有这个命令）。
+  // 宿主能力位。null = 还没探测到（宿主没有这个命令，或桥断了）。
   // 只有显式为 true 的能力才允许在 UI 上承诺，绝不按版本号猜。
   caps: null,
   busy: null,            // 正在安装/卸载的 entry.id，用于禁用按钮
+  // 一键安装是否走 gh-proxy。默认关：宿主是否接受非 github.com 域名未实测，
+  // 但国内直连 codeload 常常失败，所以给用户一个显式开关。
+  useProxy: false,
   live: null,            // 实时 topic 搜索结果
   liveLoading: false,
   liveError: null,
@@ -230,7 +241,7 @@ async function refreshInstalled() {
 }
 
 /** 探测宿主能力位。命令不存在 ⇒ caps 保持 null ⇒ UI 退回「复制命令」交接模式。
- *  这里的关键是**不按版本号猜**：老宿主报的版本号与新宿主一样，但一个安装接口都没有。 */
+ *  这里的关键是**不按版本号猜**：有没有安装接口，不能从版本号字符串看出来。 */
 async function probeCapabilities() {
   try {
     const raw = await hostInvoke('get_plugin_host_capabilities');
@@ -246,7 +257,7 @@ async function probeCapabilities() {
       can_manage_service: raw.can_manage_service === true,
     };
   } catch (_) {
-    // 老宿主没有这条命令（或桥断了）—— 两种都是「不能一键装」，UI 表现一致
+    // 宿主没有这条命令（或桥断了）—— 两种都是「不能一键装」，UI 表现一致
     state.caps = null;
   }
 }
@@ -319,6 +330,29 @@ function normalizeCatalog(raw, source) {
   };
 }
 
+/** 带超时的 fetch。被墙的地址不会自己及时失败，没有超时整页就卡在 loading。 */
+async function fetchWithTimeout(url, opts) {
+  const ctl = typeof AbortController === 'function' ? new AbortController() : null;
+  const timer = ctl ? setTimeout(() => ctl.abort(), CONFIG.requestTimeoutMs) : null;
+  try {
+    const o = Object.assign({}, opts || {});
+    if (ctl) o.signal = ctl.signal;
+    return await fetch(url, o);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+/** 把完整 GitHub URL 换成加速地址。非 GitHub 或已带前缀的原样返回。 */
+function viaProxy(url) {
+  const u = String(url || '');
+  if (!CONFIG.proxyPrefix || u.startsWith(CONFIG.proxyPrefix)) return u;
+  if (!/^https:\/\/(raw\.githubusercontent\.com|api\.github\.com|codeload\.github\.com|github\.com)\//.test(u)) {
+    return u;
+  }
+  return CONFIG.proxyPrefix + u;
+}
+
 async function fetchCatalog() {
   state.loading = true;
   state.error = null;
@@ -327,7 +361,7 @@ async function fetchCatalog() {
   let lastErr = null;
   for (const url of CONFIG.catalogUrls) {
     try {
-      const res = await fetch(url, { cache: 'no-cache' });
+      const res = await fetchWithTimeout(url, { cache: 'no-cache' });
       if (!res.ok) { lastErr = new Error(`HTTP ${res.status}`); continue; }
       const raw = await res.json();
       if (!raw || !Array.isArray(raw.plugins)) { lastErr = new Error('目录格式不正确'); continue; }
@@ -361,12 +395,21 @@ async function searchTopicLive() {
   render();
   try {
     const q = encodeURIComponent(`topic:${CONFIG.topic}`);
-    const res = await fetch(
-      `https://api.github.com/search/repositories?q=${q}&per_page=60&sort=updated`,
-      { headers: { Accept: 'application/vnd.github+json' } }
-    );
-    if (!res.ok) throw new Error(`GitHub HTTP ${res.status}`);
-    const data = await res.json();
+    const direct = `${CONFIG.searchUrl}?q=${q}&per_page=60&sort=updated`;
+    // 直连 → 加速：加速地址由 viaProxy() 统一拼前缀，避免把前缀散落到调用点。
+    let data = null;
+    let lastErr = null;
+    for (const url of [direct, viaProxy(direct)]) {
+      try {
+        const res = await fetchWithTimeout(url, { headers: { Accept: 'application/vnd.github+json' } });
+        if (!res.ok) { lastErr = new Error(`GitHub HTTP ${res.status}`); continue; }
+        data = await res.json();
+        break;
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    if (!data) throw lastErr || new Error('GitHub 搜索失败');
     const known = new Set((state.catalog ? state.catalog.plugins : []).map((p) => p.repo));
     state.live = (data.items || [])
       .filter((r) => !known.has(r.full_name))
@@ -399,12 +442,13 @@ async function searchTopicLive() {
 
 /* ----------------------------------------------------------------- install */
 
-/** 生成 PowerShell 安装命令 —— 仅在宿主没有安装 IPC 时使用（老宿主交接路径）。
- *  repo 根目录就是插件时直接 clone 到位，子目录 / monorepo 时 clone 到临时目录再搬。 */
+/** 生成 PowerShell 安装命令 —— 仅在宿主没有安装 IPC 时使用（降级交接路径）。
+ *  repo 根目录就是插件时直接 clone 到位，子目录 / monorepo 时 clone 到临时目录再搬。
+ *  走 gh-proxy 加速；加速地址不通时，命令里给的直连地址可手动替换（见安装弹窗说明）。 */
 function installCommand(entry) {
   const pluginDir = '%APPDATA%\\OpenRevo\\plugins';
   const dest = `${pluginDir}\\${entry.id}`;
-  const url = `https://github.com/${entry.repo}.git`;
+  const url = viaProxy(`https://github.com/${entry.repo}.git`);
   const branch = entry.branch || 'main';
 
   if (!entry.subpath) {
@@ -428,10 +472,14 @@ function installCommand(entry) {
   ].join('; ');
 }
 
-/** 宿主安装器吃的归档地址。必须是 https —— 宿主硬性拒绝 http 与 file。 */
-function archiveUrl(entry) {
+/** 宿主安装器吃的归档地址。必须是 https —— 宿主硬性拒绝 http 与 file。
+ *  `useProxy` 时走 gh-proxy：实测它代理的 zip 仍保留 `<repo>-<branch>/` 根目录，
+ *  所以 subpath 语义不变；但宿主是否接受非 github.com 域名**未实测**，
+ *  因此默认不加速，由用户在安装弹窗里显式勾选。 */
+function archiveUrl(entry, useProxy) {
   const branch = entry.branch || 'main';
-  return `https://codeload.github.com/${entry.repo}/zip/refs/heads/${encodeURIComponent(branch)}`;
+  const direct = `https://codeload.github.com/${entry.repo}/zip/refs/heads/${encodeURIComponent(branch)}`;
+  return useProxy ? viaProxy(direct) : direct;
 }
 
 /** GitHub codeload 归档的根目录名：`<repo>-<branch>`（分支里的 `/` 换成 `-`）。
@@ -485,7 +533,7 @@ async function installEntry(entry) {
   render();
 
   try {
-    const args = { id: entry.id, url: archiveUrl(entry), subpath: archiveSubpath(entry) };
+    const args = { id: entry.id, url: archiveUrl(entry, state.useProxy), subpath: archiveSubpath(entry) };
     if (entry.sha256) args.sha256 = entry.sha256;
 
     const result = await hostInvoke('install_plugin_from_url', args);
@@ -560,7 +608,7 @@ function shortErr(e) {
 }
 
 /** 读已安装插件的 manifest 原文，与目录里的版本比对，标出「可更新」。
- *  只在宿主声明 can_read_manifest 时做，避免对老宿主发无效 IPC。 */
+ *  只在宿主声明 can_read_manifest 时做，避免发出宿主不支持的 IPC。 */
 async function readInstalledVersions() {
   if (!(state.caps && state.caps.can_read_manifest === true)) return;
   const ids = Array.from(state.installed);
@@ -1077,6 +1125,20 @@ function openInstallModal(entry) {
               ? '目录里提供了 <b>sha256</b>，宿主会在安装前校验归档指纹 —— 内容被替换会被拒绝。'
               : '目录条目<b>没有提供 sha256</b>，宿主只能校验传输完整性，不能证明内容未被篡改。'}</div></div>
           </div>
+        </div>
+        <div class="mkt-block">
+          <div class="h">下载链路</div>
+          <label class="mkt-check">
+            <input type="checkbox" data-opt="proxy" ${state.useProxy ? 'checked' : ''}>
+            <span>走 <b>gh-proxy.com</b> 加速（国内直连 codeload 常常超时）</span>
+          </label>
+          <div class="mkt-note plain" style="margin-top:8px">
+            ${I.info}
+            <span>加速只改下载地址，不改校验与落盘：宿主仍会强制 HTTPS、校验 sha256、按 subpath 定位插件。
+            实测加速后的归档仍保留 <code>${esc(archiveRoot(entry))}/</code> 根目录，因此 <code>subpath</code> 不变。<br/>
+            但<b>宿主会不会接受非 github.com 的下载域名尚未实测</b>—— 若开启后报安全策略错误，
+            关掉这个开关用直连重试。</span>
+          </div>
         </div>` : `
         <div class="mkt-note">
           ${I.alert}
@@ -1118,7 +1180,8 @@ function openInstallModal(entry) {
             <span>也可以直接下载归档，解压后把${
               entry.subpath ? `其中的 <code>${esc(entry.subpath)}</code> 目录` : '全部内容'
             }放进 <code>plugins\\${esc(entry.id)}</code>。<br/>
-            <code style="word-break:break-all">${esc(repoUrl(entry))}</code></span>
+            <code style="word-break:break-all">${esc(repoUrl(entry))}</code>
+            <br/>该地址直连不通时，可在前面加 <code>https://gh-proxy.com/</code> 走加速。</span>
           </div>
         </details>` : `
         <div class="mkt-block">
@@ -1131,7 +1194,8 @@ function openInstallModal(entry) {
           <span>也可以手动下载：把下面的地址贴进浏览器，解压后把${
             entry.subpath ? `其中的 <code>${esc(entry.subpath)}</code> 目录` : '全部内容'
           }放进 <code>plugins\\${esc(entry.id)}</code>。
-          <br/><code style="word-break:break-all">${esc(repoUrl(entry))}</code></span>
+          <br/><code style="word-break:break-all">${esc(viaProxy(repoUrl(entry)))}</code>
+          <br/>直连不通时用上面的加速地址；都不行可去掉 <code>https://gh-proxy.com/</code> 前缀改回直连。</span>
         </div>`}
       </div>
 
@@ -1152,6 +1216,12 @@ function openInstallModal(entry) {
   const close = () => scrim.remove();
   scrim.addEventListener('click', (e) => { if (e.target === scrim) close(); });
   scrim.querySelectorAll('[data-close]').forEach((el) => el.addEventListener('click', close));
+
+  // 加速开关：只影响「下载地址」，随时可切；状态存在 state 里，下次打开弹窗沿用。
+  const optProxy = scrim.querySelector('[data-opt="proxy"]');
+  if (optProxy) {
+    optProxy.addEventListener('change', () => { state.useProxy = optProxy.checked; });
+  }
 
   scrim.querySelectorAll('[data-act2]').forEach((el) => {
     el.addEventListener('click', async () => {

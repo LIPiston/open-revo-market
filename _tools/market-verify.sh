@@ -6,7 +6,7 @@
 # 会让"目录能拉下来"这条路径永远测不到。这里起一个本地 HTTP 服务来对齐语义。
 #
 # 为什么跑两条宿主路径：市场的行为由 get_plugin_host_capabilities 决定，
-# 新宿主走一键安装、老宿主走复制命令。两条都得验收，只测一条等于漏测。
+# 能力齐全时走一键安装、缺安装 IPC 时走复制命令。两条都得验收，只测一条等于漏测。
 #
 #   用法： bash _tools/market-verify.sh [theme] [host]
 #          theme = cyber|mono|light   （默认 cyber）
@@ -47,12 +47,16 @@ run_one() {
   local cat_file="${3:-$ROOT/market/catalog.json}"
   local suffix="${4:-}"
   local skip_uninst="${5:-}"
+  local extra_query="${6:-}"
   local tag="$THEME-$host$suffix"
   # catalog=local：把市场对在线目录的 fetch 劫持到仓库里的 market/catalog.json。
   # 不这样做，验收测的是 GitHub 上的旧目录 —— 本地改了目录但还没 push 时等于没测。
   local page="http://127.0.0.1:$PORT/_tools/market-preview.html?theme=$THEME&host=$host&catalog=local"
   if [ "$cat_rel" != "../market/catalog.json" ]; then
     page="$page&catalogPath=$cat_rel"
+  fi
+  if [ -n "$extra_query" ]; then
+    page="$page&$extra_query"
   fi
   local prof
   prof="$(mktemp -d)"
@@ -67,12 +71,14 @@ run_one() {
   size=$(stat -c%s "$OUT/market-$tag.png" 2>/dev/null || echo 0)
   echo "=== host=$host  shot: _shots/market-$tag.png ($size bytes) ==="
 
-  python - "$OUT/market-$tag.dom.html" "$host" "$cat_file" "$skip_uninst" <<'PY'
+  python - "$OUT/market-$tag.dom.html" "$host" "$cat_file" "$skip_uninst" "$extra_query" <<'PY'
 import json, re, sys, html
 d = open(sys.argv[1], encoding='utf-8', errors='replace').read()
 host = sys.argv[2]
 catalog_path = sys.argv[3]
 SKIP_UNINSTALL = bool(sys.argv[4]) if len(sys.argv) > 4 else False
+EXTRA_QUERY = sys.argv[5] if len(sys.argv) > 5 else ''
+EXPECT_PROXY = 'proxy=1' in EXTRA_QUERY
 m = re.search(r'<pre id="diag"[^>]*>(.*?)</pre>', d, re.S)
 if not m:
     print("diag: NOT FOUND —— 预览页没跑起来"); sys.exit(2)
@@ -126,6 +132,10 @@ if host == 'new':
     mm = _re.search(r'codeload\.github\.com/[^/]+/([^/]+)/zip/refs/heads/(.+)$', url)
     exp_root = (mm.group(1) + '-' + mm.group(2).replace('/', '-')) if mm else None
     root_ok = bool(sub) and bool(exp_root) and (sub == exp_root or sub.startswith(exp_root + '/'))
+    # 加速开关的断言：勾选后 url 必须带 gh-proxy 前缀，未勾选必须不带。
+    # 两条都测，否则「开关存在但没接线」和「默认就偷偷走代理」都验不出来。
+    is_proxied = url.startswith('https://gh-proxy.com/')
+    proxy_ok = (is_proxied == EXPECT_PROXY)
     install_ok = (
         inst.get('mode') == 'oneclick'
         and inst.get('install') == 'confirmed'
@@ -136,8 +146,9 @@ if host == 'new':
         and a.get('id')
         and a.get('url')
         and root_ok
+        and proxy_ok
     )
-    print("subpath:", sub, "root_ok=", root_ok)
+    print("subpath:", sub, "root_ok=", root_ok, "proxy:", is_proxied, "proxy_ok=", proxy_ok)
     if inst.get('mockErrors'):
         print("宿主拒收的调用：", inst['mockErrors'])
     if inst.get('stillOpen'):
@@ -145,8 +156,8 @@ if host == 'new':
 else:
     install_ok = inst.get('mode') == 'legacy' and inst.get('install') == 'modal-open' and inst.get('hasCmd')
 
-# 卸载：新宿主必须真的发出 uninstall_plugin，参数字段名是 id（不是 pluginId），
-# 且弹窗关闭、宿主没拒收。老宿主没有卸载接口（按钮 disabled），这里只要求「没有误发」。
+# 卸载：能力齐全时必须真的发出 uninstall_plugin，参数字段名是 id（不是 pluginId），
+# 且弹窗关闭、宿主没拒收。没有卸载接口时按钮 disabled，这里只要求「没有误发」。
 if host == 'new':
     ua = uninst.get('args') or {}
     # 分页轮次用的是伪造条目（host 已装列表里没有它们），卡片上本来就没有卸载按钮 ——
@@ -222,6 +233,10 @@ if [ -n "$HOST_ONLY" ]; then
 else
   run_one new || rc=1
   run_one old || rc=1
+  # 第三条：勾上「走 gh-proxy 加速」再装一次，断言 url 真的换了地址。
+  # 只测直连会漏掉「开关画了但没接线」，只测加速会漏掉「默认偷偷走代理」。
+  echo "=== 加速开关专项（?proxy=1）==="
+  run_one new "../market/catalog.json" "$ROOT/market/catalog.json" "-proxy" "" "proxy=1" || rc=1
 fi
 
 # 第二条闸：用一份「条目多到必须翻页」的临时目录再跑一次。

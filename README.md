@@ -2,20 +2,6 @@
 
 OpenRevo（`open-revo.exe`）的**第三方插件市场**：宿主里的一个页签，浏览、安装、卸载插件。
 
-项目原名 `openrevo-plugins`，2026-10-17 更名为 **`open-revo-market`**
-（GitHub 仓库：`LIPiston/open-revo-market`；旧地址仍会重定向）。
-2026-10-18 起仓库**只维护市场一条链** —— 皮肤与背景插件已整体移除（见 [`docs/removed-skins.md`](docs/removed-skins.md)）。
-
-> **本机克隆目录名可能与仓库名不同**（如 `openrevo-plugins\`）。目录名不影响任何命令；
-> 想统一可跑 `_tools\rename-project.ps1`。
-
-| 项 | 当前值 |
-|---|---|
-| 宿主 | **9,437,696 B** 那版（`ProductVersion` 仍报 0.9.1），有安装 / 卸载 IPC |
-| 主交付物 | **`plugin-market/`**（`tab` 形态，已入库，`git clone` 后可 `--install` 即用） |
-| 插件目录 | `%APPDATA%\OpenRevo\plugins\` 里**只有 `plugin-market`** |
-| 皮肤 / 背景 | **已移除**（2026-10-18），代码、产物、工具链、文档都不在本仓库 |
-
 ---
 
 ## 快速开始
@@ -58,10 +44,10 @@ open-revo-market\
 
 **市场的核心口径**（细节见 [`docs/market.md`](docs/market.md)）：
 
-* 安装方式**由宿主能力位决定**（运行时探测 `get_plugin_host_capabilities`），不按版本号猜 ——
-  两代宿主的 `ProductVersion` 都是 0.9.1。
+* 安装方式**由宿主能力位决定**（运行时探测 `get_plugin_host_capabilities`），不按版本号猜。
 * 构建产物**必须单文件**：宿主用 `srcDoc` 注入，任何外部引用都会 404。
 * 在线目录拉不到时保留兜底数据并如实写明原因；`stars` / 能力披露缺失写 `null`，不伪装。
+* GitHub 直连不稳时走 gh-proxy 加速；一键安装的加速是**可选开关**，默认不启用。
 
 ---
 
@@ -69,23 +55,18 @@ open-revo-market\
 
 | 文档 | 内容 |
 |---|---|
-| [`docs/market.md`](docs/market.md) | 市场完整说明：能力、宿主降级、构建、预览、验收闸、安装卸载 |
-| [`docs/host-and-plugins.md`](docs/host-and-plugins.md) | 插件生态实测：五种形态、sandbox、两代宿主 IPC |
-| [`docs/project-status.md`](docs/project-status.md) | 已知边界 + 命名沿革 |
-| [`docs/removed-skins.md`](docs/removed-skins.md) | 已移除的皮肤 / 背景链留档 |
-| [`docs/reference/host-plugin-ipc.md`](docs/reference/host-plugin-ipc.md) | **新宿主**的插件 IPC：签名、能力位、安装器防线 |
-| [`docs/reference/market-host-constraints.md`](docs/reference/market-host-constraints.md) | **老宿主**的 tab 契约（已被新宿主部分推翻） |
+| [`docs/market.md`](docs/market.md) | 市场完整说明：能力、宿主降级、构建、预览、验收闸、加速、安装卸载 |
+| [`docs/host-and-plugins.md`](docs/host-and-plugins.md) | 插件生态实测：五种形态、sandbox、宿主 IPC、下载链路 |
+| [`docs/project-status.md`](docs/project-status.md) | 已知边界 |
+| [`docs/reference/host-plugin-ipc.md`](docs/reference/host-plugin-ipc.md) | 插件 IPC 清单：签名、能力位、安装器防线 |
 
 ---
 
 ## 注意事项
 
 * **别手改产物**：改 `market/src/`，然后 `python build_market.py --install`。
-* 当前基线：cyber / mono 双主题 × 新旧两代宿主，**四个组合全 PASS**，0 JS 错误。
+* 当前基线：cyber / mono 双主题 × 两种宿主 mock + 加速专项，**六轮全 PASS**，0 JS 错误。
 * `widget` / `slot` 两种形态只从前端字面量确认，**未做端到端实测**；
   `service` / `shell` / `driver` 在前端里无字面量，不要依据手册对外承诺。
 * 改 `%APPDATA%\OpenRevo\config.json` 前**先备份**：宿主运行中会整份回写。
 * **许可**：仓库目前**没有 `LICENSE` 文件**（尽管目录条目声明 MIT）——如需正式授权请补一份。
-
-> 宿主取证、抓图与度量工具、开发记录已移到仓库外存档，不在本仓库。
-> 因此涉及「从 exe 抽宿主真值」「真机截图取证」的操作，需要另取存档。

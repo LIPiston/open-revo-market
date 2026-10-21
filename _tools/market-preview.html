@@ -53,8 +53,8 @@ const CALLS = [];
 const MOCK_ERRORS = [];
 const INSTALL_ARGS = [];
 const UNINSTALL_ARGS = [];
-// ?host=old 模拟没有安装接口的老宿主（0.9.1）：get_plugin_host_capabilities 直接 reject。
-// 默认模拟新宿主：能力位齐全、安装/卸载/重载都返回成功。
+// ?host=old 模拟没有安装接口的宿主：get_plugin_host_capabilities 直接 reject。
+// 默认模拟能力齐全的宿主：安装/卸载/重载都返回成功。
 const HOST_MODE = params.get('host') || 'new';
 const INSTALLED = [
   { id: 'plugin-market', plugin_type: 'tab', enabled: true },
@@ -96,7 +96,7 @@ window.__TAURI_INTERNALS__ = {
     if (cmd === 'reload_plugins') return INSTALLED;
     if (cmd === 'open_plugins_dir') return 'opened';
     // 复刻真宿主的 serde 校验：install_plugin_from_url 的必需字段是 { id, url }。
-    // 这是被真机打过脸的：早先市场只传了 { url, subpath? }，宿主直接回
+    // 必需字段以宿主 serde 为准：缺 id 时宿主直接回
     //   invalid args `id` for command `install_plugin_from_url`: missing required key id
     // 只传 url 就成功返回，等于把真实故障藏起来 —— mock 必须比真宿主更挑，不能更松。
     if (cmd === 'install_plugin_from_url') {
@@ -124,7 +124,7 @@ window.__TAURI_INTERNALS__ = {
       }
       // 复刻真宿主的**归档目录解析**：codeload 的 zip 解压后固定多一层
       // `<repo>-<branch>/`，宿主把 subpath 直接拼在 extracted/ 后面，**不会剥这层**。
-      // 早先市场传的是仓库内路径（plugin-market），宿主去找 extracted\plugin-market，
+      // 若传仓库内路径（plugin-market），宿主会去找 extracted\plugin-market，
       // 真机上就是 manifest.json not found in resolved content directory。
       // mock 必须复现这条，否则「参数对了但布局错了」永远验不出来。
       const dir = resolvedContentDir(a);
@@ -200,6 +200,8 @@ async function run() {
     html = html
       .replaceAll('https://raw.githubusercontent.com/LIPiston/open-revo-market/main/market/catalog.json',
                   catPath)
+      .replaceAll('https://gh-proxy.com/https://raw.githubusercontent.com/LIPiston/open-revo-market/main/market/catalog.json',
+                  catPath)
       .replaceAll('https://cdn.jsdelivr.net/gh/LIPiston/open-revo-market@main/market/catalog.json',
                   catPath);
   }
@@ -242,7 +244,7 @@ function snapshot() {
     footer: (d.querySelector('.mkt-footer') || {}).textContent || null,
     toast: toast ? toast.textContent : null,
     // 滚动条：容器必须真的能滚（scrollHeight > clientHeight），且外层没有撑成 auto。
-    // 早先 #app 缺 height，.mkt 退化成 auto，overflow:auto 永不触发 —— 插件少时看不出来。
+    // #app 若缺 height，.mkt 会退化成 auto，overflow:auto 永不触发 —— 插件少时看不出来。
     scroll: (function () {
       const b = d.querySelector('.mkt-body');
       if (!b) return null;
@@ -323,6 +325,15 @@ async function exerciseInstall() {
   const before = CALLS.length;
   const go = scrim.querySelector('[data-act2="install-now"]');
   if (!go) return { install: 'no install-now button', mode };
+
+  // ?proxy=1：先把弹窗里的加速开关打开，验证勾选后 url 真的换成加速地址。
+  // 默认不勾 —— 那一轮验的是直连地址，两条链路都要有断言，不能只测一条。
+  const proxyBox = scrim.querySelector('[data-opt="proxy"]');
+  if (params.get('proxy') === '1' && proxyBox) {
+    proxyBox.checked = true;
+    proxyBox.dispatchEvent(new w.Event('change', { bubbles: true }));
+  }
+
   go.click();
   await new Promise((r) => setTimeout(r, 600));
   const callsSince = CALLS.slice(before).map((c) => c[0]);
@@ -416,7 +427,7 @@ async function exerciseUninstall() {
   };
 }
 
-// ?modal=1：自动打开安装弹窗，供出图（仅老宿主模式有弹窗）
+// ?modal=1：自动打开安装弹窗，供出图
 if (params.get('modal') === '1') {
   setTimeout(() => { try { exerciseInstall(); } catch (_) {} }, 2600);
 }
