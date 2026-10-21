@@ -43,6 +43,7 @@
 | 用途 | 工具 |
 |---|---|
 | **市场验收闸** | `bash _tools/market-verify.sh [cyber\|mono] [new\|old]` → `RESULT: PASS/FAIL`，非 0 **不许交付** |
+| 一行安装 | `_tools\install-market.ps1`（默认在线拉现成产物；`-Local` / `-From` / `-DryRun` / `-Repo`） |
 | 等价宿主预览 | `_tools/market-preview.html`（`?theme=` / `?host=` / `?catalog=local` / `?modal=1`） |
 | 市场出图 | `_tools/market-shots.sh` |
 | 重启宿主 | `_tools\kill-and-start.ps1`（提权，`Stop-Process -Force`，可靠） |
@@ -52,7 +53,7 @@
 
 | 类别 | 工具 | 备注 |
 |---|---|---|
-| **市场（本仓库主链）** | `build_market.py`（构建 + 自检，`--check` / `--install`）、`_tools/market-verify.sh`、`_tools/market-preview.html`、`_tools/market-shots.sh`、`market/crawl_topic.py`、`market/validate_catalog.py` | 源码只在 `market/src/`；`plugin-market/` 是生成物别手改 |
+| **市场（本仓库主链）** | `build_market.py`（构建 + 自检，`--check` / `--install`）、`_tools/install-market.ps1`（一行安装）、`_tools/market-verify.sh`、`_tools/market-preview.html`、`_tools/market-shots.sh`、`market/crawl_topic.py`、`market/validate_catalog.py` | 源码只在 `market/src/`；`plugin-market/` 是生成物别手改 |
 | **度量（模型不能读图，这就是眼睛）** | `census.py`（像素级色相族普查）、`cmp.py`（分块 MAE）、`prof.py`（行/列亮度 ASCII 签名）、`ascii.py`（ASCII 渲染） | 对任何截图都可用，不限于已被移除的皮肤链 |
 | 宿主进程 | `kill-and-start.ps1`、`restart.ps1`、`when.ps1` | `restart.ps1` 走 `Stop-ScheduledTask`，进程没真死时会跳过重启，故不作为权威路径 |
 | 列窗口 / 遮挡 | `allwins.ps1`、`listwins.ps1`、`wins.ps1`、`who.ps1`、`who-locks.ps1` | 均带 `CharSet=CharSet.Unicode`，中文标题才读得全；`who.ps1` 用 `WindowFromPoint`，**会跳过 Tauri 透明/分层窗口**，不能当 z 序证据 |
