@@ -52,12 +52,8 @@ open-revo-market\
 │   └── validate_catalog.py     #   目录校验
 ├── build_market.py             # 市场构建器（单文件产物 + 自检）
 ├── plugin-market\              # ★ 市场构建产物（入库，可直接装）
-│
-├── _extracted\                 # 从 open-revo.exe 抽出的宿主真值
-├── _tools\                     # 安装 / 验收 / 审计 / 抓图工具
-├── docs\                       # 详细文档与技能包（见下）
-├── _audit\                     # 审计输出（gitignore）
-└── _shots\                     # 截图与验收出图
+├── _tools\                     # 安装 / 验收 / 预览 / 出图
+└── docs\                       # 详细文档（见下）
 ```
 
 **市场的核心口径**（细节见 [`docs/market.md`](docs/market.md)）：
@@ -77,15 +73,8 @@ open-revo-market\
 | [`docs/host-and-plugins.md`](docs/host-and-plugins.md) | 插件生态实测：五种形态、sandbox、两代宿主 IPC |
 | [`docs/project-status.md`](docs/project-status.md) | 已知边界 + 命名沿革 |
 | [`docs/removed-skins.md`](docs/removed-skins.md) | 已移除的皮肤 / 背景链留档 |
-| [`docs/SKILL.md`](docs/SKILL.md) | 技能入口：状态、硬约束、工作流、验收清单 |
-| [`docs/devlog.md`](docs/devlog.md) | 开发记录（时间线 + 证据 + 未决项） |
 | [`docs/reference/host-plugin-ipc.md`](docs/reference/host-plugin-ipc.md) | **新宿主**的插件 IPC：签名、能力位、安装器防线 |
 | [`docs/reference/market-host-constraints.md`](docs/reference/market-host-constraints.md) | **老宿主**的 tab 契约（已被新宿主部分推翻） |
-| [`docs/reference/host-truth-extraction.md`](docs/reference/host-truth-extraction.md) | 怎么从 exe 抽宿主 CSS / JS |
-| [`docs/reference/plugin-dev-0.8.8-skill.md`](docs/reference/plugin-dev-0.8.8-skill.md) | 开发者新版 skill 的逐条实测对照 |
-| [`docs/reference/plugin-manual-digest.md`](docs/reference/plugin-manual-digest.md) | 官方手册消化件 +「手册 ≠ 发行版」对照表 |
-| [`docs/reference/environment-and-tools.md`](docs/reference/environment-and-tools.md) | 环境硬事实、**工具地图**、证据索引、回退清单 |
-| [`docs/reference/pitfalls.md`](docs/reference/pitfalls.md) | 踩坑总表：现象 → 原因 → 对策 |
 
 ---
 
@@ -97,3 +86,6 @@ open-revo-market\
   `service` / `shell` / `driver` 在前端里无字面量，不要依据手册对外承诺。
 * 改 `%APPDATA%\OpenRevo\config.json` 前**先备份**：宿主运行中会整份回写。
 * **许可**：仓库目前**没有 `LICENSE` 文件**（尽管目录条目声明 MIT）——如需正式授权请补一份。
+
+> 宿主取证、抓图与度量工具、开发记录已移到仓库外存档，不在本仓库。
+> 因此涉及「从 exe 抽宿主真值」「真机截图取证」的操作，需要另取存档。

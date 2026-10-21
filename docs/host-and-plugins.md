@@ -1,9 +1,8 @@
 # OpenRevo 插件生态（实测）
 
 从 `open-revo.exe` 前端里抽出的**实际行为**，不是官方手册的转述。
-手册与发行版的差异见 [`reference/plugin-manual-digest.md`](reference/plugin-manual-digest.md)。
+手册的每条承诺与发行版实际行为的对照，见 [`reference/market-host-constraints.md`](reference/market-host-constraints.md)。
 
-> 面向 Agent 的版本：`SKILL.md` §1（同一批结论，条目更密）。
 > 命令签名与安装器防线：[`reference/host-plugin-ipc.md`](reference/host-plugin-ipc.md)。
 
 ## 1. 五种形态

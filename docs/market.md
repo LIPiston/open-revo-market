@@ -2,7 +2,6 @@
 
 宿主里的一个 `tab` 页签：浏览第三方插件、看能力披露、安装或卸载。
 
-> 面向 Agent 的浓缩版在 [`SKILL.md`](SKILL.md) §3；本页是可独立阅读的完整说明。
 > 宿主 IPC 的逐字签名见 [`reference/host-plugin-ipc.md`](reference/host-plugin-ipc.md)。
 
 ## 1. 能做什么
@@ -151,8 +150,7 @@ bash _tools/market-verify.sh mono                       # 另一套主题
   `%APPDATA%\OpenRevo\config.json` 里清掉 `custom_plugin_toggles` 中残留的该 ID。
 
 > ⚠️ 改 `config.json` 前先备份。宿主运行中持有权威内存态，**会整份回写 config**，
-> 保险做法是「停 → 改 → 启」。回退清单见
-> [`reference/environment-and-tools.md`](reference/environment-and-tools.md) §4。
+> 保险做法是「停 → 改 → 启」。
 
 `install-market.ps1` 的参数：
 
