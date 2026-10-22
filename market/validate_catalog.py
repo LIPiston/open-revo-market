@@ -15,6 +15,7 @@
   E9 无内联脚本      —— description 里不许出现 HTML/script（UI 会转义，但不该放进目录）
   E10 commit 形状    —— 有 commit 时必须是 40 位 hex
   E11 sha256 形状    —— 有 sha256 时必须是 64 位 hex（会透传给宿主做完整性校验）
+  E12 作者归属      —— author 必须等于 repo 的 owner（manifest 里的自填 author 不作数）
 
 用法：
     python market/validate_catalog.py [catalog.json]
@@ -125,6 +126,14 @@ def validate(path: Path) -> list[str]:
         sha = p.get("sha256")
         if sha is not None and not (isinstance(sha, str) and HEX64.match(sha)):
             errs.append(f"{where}: E11 sha256 形状非法：{sha!r}（应为 64 位小写 hex 或省略）")
+
+        # E12 作者 = 仓库归属者。manifest 里的 author 是自填展示名，可以写「社区」之类
+        # 与仓库归属无关的名字；目录里必须显示真正控制这个仓库的账号。
+        if isinstance(repo, str) and REPO_RE.match(repo):
+            owner = repo.split("/")[0]
+            author = p.get("author")
+            if not isinstance(author, str) or author.casefold() != owner.casefold():
+                errs.append(f"{where}: E12 author 必须等于仓库归属者 {owner!r}，得到 {author!r}")
 
     return errs
 

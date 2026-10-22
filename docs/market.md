@@ -58,10 +58,13 @@
 | 必填 | `manifest.json` 的 `id` / `name` / `version` / `plugin_type`；`id` 就是安装后的目录名 |
 | `plugin_type` | `skin` / `background` / `tab` / `widget` / `slot`（0.9.1 实测枚举） |
 | 能力字段 | 由工具侧扫描填写，作者手写无效 |
+| 作者 | 目录里的作者**一律取仓库归属者**（`owner`）。manifest 的 `author` 只是自填展示名，不入目录 |
 
-## 4. 三条不能让步的口径
+## 4. 四条不能让步的口径
 
 * **身份 = `owner/repo[/subpath]`**，绝不用展示名当键（展示名会撞车）。
+* **作者 = 仓库归属者**：`author` 必须等于 `repo` 的 owner，`validate_catalog.py` 的 E12 强制这一点。
+  manifest 自填的 `author` 可能是「某某社区」之类与仓库控制权无关的名字，不能当真。
 * **能力披露是三态**：`[...]` = 扫过并检出；`[]` = 扫过未检出；**`null` = 没扫过**。
   爬虫不做真实扫描，一律写 `null`（UI 渲染「未扫描」）。**绝不写 `[]`** —— 那等于撒谎说「检查过，很干净」。
 * **失败不伪装**：在线目录拉不到时保留兜底数据，并如实写明原因（如 `未连上在线目录：HTTP 404`）；
@@ -75,7 +78,7 @@
 | `build_market.py` | 把三者内联成**单文件** `plugin-market/index.html`，并做产物自检；`--check` / `--install` |
 | `market/catalog.json` | 策展目录（构建时内联为离线兜底 `SEED`） |
 | `market/crawl_topic.py` | 爬 GitHub topic → 生成 / 合并目录（`--dry-run` / `--merge` / `--out`） |
-| `market/validate_catalog.py` | 目录结构校验 E1–E11，CI 与本地共用 |
+| `market/validate_catalog.py` | 目录结构校验 E1–E12，CI 与本地共用 |
 | `.github/workflows/refresh-catalog.yml` | 每小时自动爬一次，**只在内容变化时**提交 |
 | `plugin-market/` | 构建产物（已入库） |
 | `_tools/install-market.ps1` | 一条命令安装（在线拉取现成产物 / `-Local` / `-From` / `-DryRun`） |
@@ -110,7 +113,7 @@ python -m http.server 8791
 
 ```bash
 python build_market.py --check                          # 产物自检
-python market/validate_catalog.py market/catalog.json   # 目录 E1–E11
+python market/validate_catalog.py market/catalog.json   # 目录 E1–E12
 bash _tools/market-verify.sh cyber                      # 验收闸
 bash _tools/market-verify.sh mono                       # 另一套主题
 ```

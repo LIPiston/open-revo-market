@@ -93,6 +93,7 @@ gh repo edit --add-topic openrevo-plugin
 | `plugin_type` | `skin` / `background` / `tab` / `widget` / `slot`（v0.9.1 实测枚举） |
 | 描述 | 写清**做什么**；不要把内容写成"最好的插件"这种无法核对的话 |
 | 能力 | 由工具侧扫描填写，作者手写无效 |
+| 作者 | 目录里的作者一律取**仓库归属者**（`owner`）；manifest 的 `author` 只是自填展示名，不入目录 |
 
 ---
 
@@ -105,7 +106,7 @@ market/
 │   ├── market.css            # 样式（内联进产物）
 │   └── market.js             # 应用逻辑（内联进产物）
 ├── crawl_topic.py            # 抓 openrevo-plugin topic → catalog.json
-├── validate_catalog.py       # 目录校验（E1–E11）
+├── validate_catalog.py       # 目录校验（E1–E12）
 ├── catalog.json              # 生成的目录（CI 每小时刷新）
 └── PLUGIN_README.md          # 会随插件一起装进插件目录
 

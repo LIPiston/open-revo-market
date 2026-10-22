@@ -42,6 +42,10 @@ CURATED = {
     "LIPiston/open-revo-market:plugin-market",
 }
 
+# 本仓库（目录的同源作者）。作者标识一律取仓库归属者，见 REPO_OWNER。
+REPO = "LIPiston/open-revo-market"
+REPO_OWNER = REPO.split("/")[0]
+
 
 def log(msg: str) -> None:
     print(msg, file=sys.stderr)
@@ -167,7 +171,9 @@ def build_entry(
         "id": pid,
         "name": (manifest or {}).get("name") or repo_meta.get("name") or pid,
         "version": (manifest or {}).get("version") or "",
-        "author": (manifest or {}).get("author") or (repo_meta.get("owner") or {}).get("login") or "",
+        # 作者 = 仓库归属者。manifest 里的 author 是自填的展示名，可能与仓库实际
+        # 归属者无关（甚至挂着社区名义），目录里只用 owner 登录名。
+        "author": (repo_meta.get("owner") or {}).get("login") or full.split("/")[0],
         "plugin_type": (manifest or {}).get("plugin_type") or (manifest or {}).get("type") or "tab",
         "description": (manifest or {}).get("description") or repo_meta.get("description") or "",
         "repo": full,
@@ -224,10 +230,10 @@ def local_entries() -> list[dict]:
             "id": pid,
             "name": m.get("name") or pid,
             "version": m.get("version") or "",
-            "author": m.get("author") or "",
+            "author": REPO_OWNER,
             "plugin_type": m.get("plugin_type") or m.get("type") or "tab",
             "description": m.get("description") or "",
-            "repo": "LIPiston/open-revo-market",
+            "repo": REPO,
             "subpath": d.name,
             "branch": "main",
             "commit": None,
@@ -319,7 +325,7 @@ def merge(prev: dict, fresh: dict) -> dict:
         key = f"{p['repo']}:{p.get('subpath','')}"
         old = by_key.get(key)
         if old:
-            for f in ("unreviewed", "capabilities", "description", "name", "author", "plugin_type"):
+            for f in ("unreviewed", "capabilities", "description", "name", "plugin_type"):
                 if f == "unreviewed" and old.get(f) is False:
                     p[f] = False          # 正典标记一旦落下，爬虫不得翻回未审核
                 elif old.get(f) is not None and old.get(f) != [] and p.get(f) in (None, ""):
