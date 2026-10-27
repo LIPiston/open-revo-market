@@ -1,6 +1,6 @@
 {
   "format": 1,
-  "generatedAt": "2026-10-27T02:03:14+00:00",
+  "generatedAt": "2026-10-27T07:48:22+00:00",
   "topic": "openrevo-plugin",
   "count": 2,
   "plugins": [
@@ -14,9 +14,9 @@
       "repo": "LIPiston/open-revo-market",
       "subpath": "plugin-market",
       "branch": "main",
-      "commit": "8ebabe52ec26b861cd99d97b2e1810cb25f92f36",
+      "commit": "9292af4f710c56f92ec49dc2da49f55401724ed8",
       "stars": 0,
-      "updatedAt": "2026-10-26T23:08:52Z",
+      "updatedAt": "2026-10-27T02:03:16Z",
       "license": null,
       "unreviewed": false,
       "capabilities": null,
