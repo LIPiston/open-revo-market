@@ -170,6 +170,10 @@ bash _tools/market-verify.sh cyber                      # 验收闸
 bash _tools/market-verify.sh mono                       # 另一套主题
 ```
 
+> Windows 上也能直接跑（Git Bash / MSYS）：脚本把交给 Python 的路径统一过一遍
+> `cygpath -w`，不依赖 shell 的参数自动转换 —— 设了 `MSYS2_ARG_CONV_EXCL=*` 时
+> `/d/...` 会被原样透传，原生 Windows 版 Python 认不出，静态服务会全 404。
+
 `market-verify.sh` 默认跑 **两种宿主 mock**（能力齐全 / 无安装 IPC），断言：
 
 * `ready` 为真，**卡片数精确等于本地 `market/catalog.json` 的条数**（不是「> 0」——

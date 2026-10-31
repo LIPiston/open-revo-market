@@ -15,6 +15,12 @@
 set -u
 CHROME="${CHROME:-/c/Program Files/Google/Chrome/Application/chrome.exe}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# Python 是原生 Windows 版：它不认 MSYS 的 /d/... 路径，而本机 shell 可能设了
+# MSYS2_ARG_CONV_EXCL=* 关掉参数自动转换（把 /d/... 原样透传）。
+# 所以凡是要交给 Python 的路径，一律显式过一遍 cygpath -w，不赌 shell 帮我们转。
+winpath() {
+  if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s\n' "$1"; fi
+}
 OUT="$ROOT/_shots"
 mkdir -p "$OUT"
 THEME="${1:-cyber}"
@@ -22,7 +28,7 @@ HOST_ONLY="${2:-}"
 PORT="${PORT:-8791}"
 
 # 起静态服务（只监听回环），指向仓库根 —— 预览页用相对路径取 plugin-market/index.html
-python - "$ROOT" "$PORT" <<'PY' &
+python - "$(winpath "$ROOT")" "$PORT" <<'PY' &
 import functools, http.server, socketserver, sys
 root, port = sys.argv[1], int(sys.argv[2])
 Handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=root)
@@ -71,7 +77,7 @@ run_one() {
   size=$(stat -c%s "$OUT/market-$tag.png" 2>/dev/null || echo 0)
   echo "=== host=$host  shot: _shots/market-$tag.png ($size bytes) ==="
 
-  python - "$OUT/market-$tag.dom.html" "$host" "$cat_file" "$skip_uninst" "$extra_query" <<'PY'
+  python - "$(winpath "$OUT/market-$tag.dom.html")" "$host" "$(winpath "$cat_file")" "$skip_uninst" "$extra_query" <<'PY'
 import json, re, sys, html
 d = open(sys.argv[1], encoding='utf-8', errors='replace').read()
 host = sys.argv[2]
@@ -373,7 +379,7 @@ fi
 # 单页目录永远不会触发翻页代码，也测不出滚动容器是否真的被约束住 ——
 # 实测踩过：#app 缺 height 时 scrollHeight == clientHeight，插件多时整页滚不动。
 BIG="$ROOT/_shots/_big-catalog.json"
-python - "$ROOT/market/catalog.json" "$BIG" <<'PY'
+python - "$(winpath "$ROOT/market/catalog.json")" "$(winpath "$BIG")" <<'PY'
 import json, sys
 cat = json.load(open(sys.argv[1], encoding='utf-8'))
 base = cat['plugins'][0]
@@ -390,7 +396,7 @@ rm -f "$BIG" "$OUT/market-$THEME-new-paged.png" "$OUT/market-$THEME-new-paged.do
 # 真实目录里现在没有这三种形态的插件，不合成的话「筛选按钮画了没接线」
 # 与「徽标配色写了没引用」都验不出来。合成的目录只落在 _shots/，不进 market/catalog.json。
 TYPES="$ROOT/_shots/_type-catalog.json"
-python - "$ROOT/market/catalog.json" "$TYPES" <<'PY'
+python - "$(winpath "$ROOT/market/catalog.json")" "$(winpath "$TYPES")" <<'PY'
 import json, sys
 cat = json.load(open(sys.argv[1], encoding='utf-8'))
 base = dict(cat['plugins'][0])
@@ -413,7 +419,7 @@ rm -f "$TYPES" "$OUT/market-$THEME-new-types.png" "$OUT/market-$THEME-new-types.
 # 与三条 min_host_version 不同的条目，专验「披露文本真的写出来了」与徽章两个分支。
 # 合成条目只落在 _shots/，不进 market/catalog.json。
 DISC="$ROOT/_shots/_disc-catalog.json"
-python - "$ROOT/market/catalog.json" "$DISC" <<'PY'
+python - "$(winpath "$ROOT/market/catalog.json")" "$(winpath "$DISC")" <<'PY'
 import json, sys
 cat = json.load(open(sys.argv[1], encoding='utf-8'))
 base = dict(cat['plugins'][0])
@@ -443,7 +449,7 @@ rm -f "$DISC" "$OUT/market-$THEME-new-disc.png" "$OUT/market-$THEME-new-disc.dom
 # 目录里放一条带 `service` 声明的条目，并用 ?installed= 把它标成已装 ——
 # 只有已装插件的卡片才会渲染启停按钮，否则这两组按钮永远测不到。
 LIFE="$ROOT/_shots/_life-catalog.json"
-python - "$ROOT/market/catalog.json" "$LIFE" <<'PY'
+python - "$(winpath "$ROOT/market/catalog.json")" "$(winpath "$LIFE")" <<'PY'
 import json, sys
 cat = json.load(open(sys.argv[1], encoding='utf-8'))
 base = dict(cat['plugins'][0])
