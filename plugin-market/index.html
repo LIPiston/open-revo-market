@@ -722,7 +722,7 @@ html[data-theme="mono"] .mkt-btn.danger {
  *   uninstall_plugin        { id }                     // 同 install：字段叫 id，不是 pluginId
  *   reload_plugins          ()                          // 重扫目录，返回插件列表
  *   get_plugin_manifest     { id }                     // 同族命令统一用 id（未单独实测，见下）
- *   set_plugin_enabled_unified { id, enabled }         // 未实测：本市场当前不调用
+ *   set_plugin_enabled_unified { id, enabled }         // 启停；失败再试 set_custom_plugin_enabled { pluginId, enabled }
  *   open_external_url       { url }                     // 仅 http/https
  *   write_clipboard         { text }
  * ========================================================================== */
