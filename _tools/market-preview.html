@@ -582,9 +582,17 @@ async function exerciseService() {
   };
 }
 
-// ?modal=1：自动打开安装弹窗，供出图
+// ?modal=1：自动打开安装弹窗，供出图。
+// 出图时必须停在弹窗上，不能跑完整演练（exerciseInstall 会点【立即安装】把弹窗关掉）。
 if (params.get('modal') === '1') {
-  setTimeout(() => { try { exerciseInstall(); } catch (_) {} }, 2600);
+  const t = Number(params.get('delay') || 2600);
+  setTimeout(() => {
+    try {
+      const w = f.contentWindow;
+      const btn = w.document.querySelector('[data-act="install"]');
+      if (btn) btn.click();
+    } catch (_) {}
+  }, t);
 }
 
 /* 再演练：点一次「实时发现」（打 api.github.com）。
@@ -605,6 +613,9 @@ async function exerciseLive() {
 }
 
 setTimeout(async () => {
+  // 出图模式（?modal=1）只停在弹窗上，不跑演练 —— 演练会点确认把弹窗关掉。
+  if (params.get('modal') === '1') return;
+
   const s = snapshot();
   let install = null;
   try { install = await exerciseInstall(); } catch (e) { install = { install: 'threw: ' + e.message }; }

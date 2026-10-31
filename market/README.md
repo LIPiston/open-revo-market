@@ -115,7 +115,9 @@ plugin-market/                # 构建产物（可直接拷进插件目录）
 _tools/
 ├── market-preview.html       # 等价宿主环境预览（复刻 srcdoc + sandbox + 桥）
 ├── market-verify.sh          # 验收闸：JS 错误 / 渲染计数 / 安装弹窗
-└── market-shots.sh           # 出图（干净版 + 弹窗）
+├── market-shots.sh           # 出图（列表 / 窄屏 / 弹窗）
+├── market-shots-modal.sh     # 只出安装弹窗
+└── host-shot.ps1             # 真实宿主窗口出图（只读，不点击）
 ```
 
 ## 开发
@@ -125,7 +127,11 @@ python build_market.py             # 构建 + 产物自检
 python build_market.py --check     # 只自检
 
 # 出图看观感（会起一个本地 HTTP 服务）
-bash _tools/market-shots.sh        # → _shots/market-clean-{cyber,mono}.png、market-modal-cyber.png
+bash _tools/market-shots.sh        # → 列表 cyber/mono、窄屏 cyber/mono、弹窗 cyber
+bash _tools/market-shots-modal.sh  # → 只出弹窗（cyber/mono），停在弹窗上
+
+# 真实宿主出图（只读：仅还原窗口，不点击不移动）
+powershell -NoProfile -ExecutionPolicy Bypass -File _tools/host-shot.ps1 -Full
 
 # 验收闸（PASS 才许交付）
 bash _tools/market-verify.sh cyber

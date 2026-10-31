@@ -69,8 +69,8 @@ open-revo-market\
 ## 注意事项
 
 * **别手改产物**：改 `market/src/`，然后 `python build_market.py --install`。
-* 当前基线：cyber / mono 双主题 × 两种宿主 mock + 加速 / 分页 / 形态 / 披露 / 生命周期五轮专项，
-  **八轮全 PASS**，0 JS 错误。
+* 当前基线：cyber / mono 双主题 × 两种宿主 mock + 加速 / 分页 / 形态 / 披露 / 生命周期五轮专项 + 服务能力缺失，
+  **八轮全 PASS**，0 JS 错误。改版后的 UI 在真实宿主里复验通过（深色自带底，不再出现白底白字）。
 * 八种 `plugin_type` 的取值已确认在官方手册内；其中 `service` / `shell` / `driver`
   在前端 JS 里没有注入分支，**形态取值的运行行为未做端到端实测** ——
   市场只按取值筛选与配色，不据此推断运行期行为。

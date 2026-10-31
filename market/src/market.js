@@ -103,6 +103,31 @@ const I = {
   shield: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l7 3v6c0 4.4-3 7.8-7 9-4-1.2-7-4.6-7-9V6z"/></svg>',
   x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
   tag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8.5" r="1.4"/></svg>',
+  chev: '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>',
+  play: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4.5v15l13-7.5z"/></svg>',
+  stop: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>',
+  power: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v9"/><path d="M6.5 6.5a8 8 0 1 0 11 0"/></svg>',
+  slash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="m6 18 12-12"/></svg>',
+  panel: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/><path d="M9 9v11"/></svg>',
+  brush: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 20c3 1 5-1 5-4 0-2 1-3 3-3l7-7a2 2 0 0 0-3-3l-7 7c0 2-1 3-3 3-2 0-3 2-2 7z"/></svg>',
+  image: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="m4 18 5-5 4 4 3-3 4 4"/></svg>',
+  widget: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="5" rx="2"/><rect x="13" y="10" width="8" height="11" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/></svg>',
+  slot: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="2.5" y="9" width="19" height="6" rx="2" stroke-dasharray="3 2.5"/></svg>',
+  server: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/></svg>',
+  shell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="19" height="16" rx="2"/><path d="m7 10 3 2-3 2"/><path d="M12.5 14h4"/></svg>',
+  chip: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2.5v3M15 2.5v3M9 18.5v3M15 18.5v3M2.5 9h3M2.5 15h3M18.5 9h3M18.5 15h3"/></svg>',
+  grid: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>',
+};
+
+/** 形态 → 图标。只为「一眼分得清类型」，不据此推断运行期行为。 */
+const TYPE_ICON = {
+  skin: 'brush', background: 'image', tab: 'panel', widget: 'widget',
+  slot: 'slot', service: 'server', shell: 'shell', driver: 'chip',
+};
+/** 形态 → 色相（与 CSS 里的 .mkt-badge.type-* 保持同一组值）。 */
+const TYPE_HUE = {
+  skin: 235, background: 38, tab: 200, widget: 160,
+  slot: 265, service: 350, shell: 172, driver: 24,
 };
 
 /* ------------------------------------------------------------------- state */
@@ -933,6 +958,44 @@ function disclosureBlock(entry) {
   return `<div class="mkt-disc">${items}</div>`;
 }
 
+/** 卡片上一眼可见的能力结论。安全信息不折叠：
+ *  三态（扫过检出 / 扫过未检出 / 没扫过）用一句话说完，细节留给弹窗。
+ *  「没扫过」用安静的纯文字行 —— 它不是一个发现，不该用告警框抢注意力。 */
+function capabilitySummary(entry) {
+  const caps = entry.capabilities;
+  if (caps === undefined || caps === null || entry.live) {
+    // 三态之一：没扫过。不能渲染成「未检出」。
+    return `<div class="mkt-cap quiet" title="该条目尚未做静态能力扫描，清单声明不代表实际行为">${I.info}<span><b>未扫描</b> · 清单不代表实际行为</span></div>`;
+  }
+  if (caps.length === 0) {
+    return `<div class="mkt-cap ok">${I.shield}<span><b>未检出</b> · 静态扫描未发现联网、文件写入等能力</span></div>`;
+  }
+  const list = caps.map((c) => CAP_LABEL[c] || c).join('、');
+  return `<div class="mkt-cap warn">${I.alert}<span>静态扫描检出：<b>${esc(list)}</b></span></div>`;
+}
+
+/** 危险组合只列命中的，逐条用扫描器的话写，不给总分、不做安全评分。 */
+function riskLines(entry) {
+  const caps = entry.capabilities;
+  if (!Array.isArray(caps)) return '';
+  return CAP_RISK
+    .filter((r) => r.need.every((n) => caps.includes(n)))
+    .map((r) => `<div class="mkt-risk">${I.alert}<span>${esc(r.text)}</span></div>`)
+    .join('');
+}
+
+/** 清单自述字段：卡片上收进 <details>，避免每张卡都铺满样板字。
+ *  verify 断言的是 DOM 文本，收起来不影响可取到。 */
+function manifestDisclosureDetails(entry) {
+  const rows = manifestDisclosure(entry);
+  if (!rows.length) return '';
+  return `
+    <details class="mkt-more">
+      <summary>${I.info}清单声明<span class="mkt-badge">${rows.length}</span>${I.chev}</summary>
+      <div class="mkt-more-body">${disclosureBlock(entry)}</div>
+    </details>`;
+}
+
 function capabilityBlock(entry) {
   const caps = entry.capabilities;
   let items;
@@ -1007,9 +1070,9 @@ function lifecycleBlock(entry) {
   let html = `
     <div class="mkt-lifecycle">
       <button class="mkt-btn sm" data-act="enable" data-id="${id}" ${dis}
-        title="让宿主重新加载该插件">${I.check}启用</button>
+        title="让宿主重新加载该插件">${I.power}启用</button>
       <button class="mkt-btn sm" data-act="disable" data-id="${id}" ${dis}
-        title="停用后插件不再被加载，文件保留">${I.x}停用</button>`;
+        title="停用后插件不再被加载，文件保留">${I.slash}停用</button>`;
 
   if (entry.service) {
     const can = canManageService();
@@ -1022,9 +1085,9 @@ function lifecycleBlock(entry) {
         <span class="dot${can ? '' : ' err'}"></span>
         <span data-svc-status="${id}" title="${capTitle}">${esc(serviceStatusText(entry))}</span>
         <button class="mkt-btn sm" data-act="service-start" data-id="${id}" ${sdis}
-          title="${capTitle || '启动伴随服务'}">启动服务</button>
+          title="${capTitle || '启动伴随服务'}">${I.play}启动</button>
         <button class="mkt-btn sm" data-act="service-stop" data-id="${id}" ${sdis}
-          title="${capTitle || '停止伴随服务'}">停止服务</button>
+          title="${capTitle || '停止伴随服务'}">${I.stop}停止</button>
       </span>`;
   }
 
@@ -1037,11 +1100,13 @@ function card(entry) {
   const upd = hasUpdate(entry);
   const tname = TYPE_LABEL[entry.plugin_type] || entry.plugin_type;
   const rel = relTime(entry.updatedAt);
+  const hue = TYPE_HUE[entry.plugin_type] || 220;
+  const icon = I[TYPE_ICON[entry.plugin_type]] || I.box;
   const stars = entry.stars === null || entry.stars === undefined
-    ? '' : `<span class="mkt-card-stat">${I.star}${entry.stars}</span>`;
+    ? '' : `<span class="mkt-card-stat" title="${entry.stars} stars">${I.star}${entry.stars}</span>`;
 
   const badges = [
-    badge(`type-${entry.plugin_type}`, tname, I.tag),
+    badge(`type-${entry.plugin_type}`, tname, icon),
     entry.version ? badge('', 'v' + entry.version) : '',
     isInst ? badge('ok', '已安装', I.check) : '',
     upd ? badge('warn', '可更新', I.refresh) : '',
@@ -1066,16 +1131,17 @@ function card(entry) {
   return `
     <div class="mkt-card${isInst ? ' installed' : ''}${isBusy ? ' busy' : ''}" data-id="${esc(entry.id)}">
       <div class="mkt-card-head">
-        <div class="mkt-avatar" style="display:flex;align-items:center;justify-content:center;color:var(--text-dim)">${I.box}</div>
+        <div class="mkt-avatar" style="--h:${hue}">${icon}</div>
         <div class="mkt-card-titles">
           <div class="mkt-card-name">${esc(entry.name)}</div>
-          <div class="mkt-card-id">${esc(entry.repo || entry.id)}${entry.subpath ? '/' + esc(entry.subpath) : ''}</div>
+          <div class="mkt-card-id" title="${esc(entry.repo || entry.id)}">${esc(entry.repo || entry.id)}${entry.subpath ? '/' + esc(entry.subpath) : ''}</div>
         </div>
       </div>
       <div class="mkt-badges">${badgeHtml}</div>
       ${desc}
-      ${disclosureBlock(entry)}
-      ${capabilityBlock(entry)}
+      ${capabilitySummary(entry)}
+      ${riskLines(entry)}
+      ${manifestDisclosureDetails(entry)}
       ${isInst ? lifecycleBlock(entry) : ''}
       <div class="mkt-card-foot">
         ${stars}
@@ -1097,6 +1163,7 @@ function toolbar() {
   const counts = typeCounts();
   const filters = [
     ['all', '全部', counts.all],
+    ['__installed__', '已安装', counts.__installed__],
     ['skin', TYPE_LABEL.skin, counts.skin || 0],
     ['background', TYPE_LABEL.background, counts.background || 0],
     ['tab', TYPE_LABEL.tab, counts.tab || 0],
@@ -1105,23 +1172,29 @@ function toolbar() {
     ['service', TYPE_LABEL.service, counts.service || 0],
     ['shell', TYPE_LABEL.shell, counts.shell || 0],
     ['driver', TYPE_LABEL.driver, counts.driver || 0],
-    ['__installed__', '已安装', counts.__installed__],
     ['__unreviewed__', '未审核', counts.__unreviewed__],
   ].filter((f) => f[0] === 'all' || f[0] === '__installed__' || f[0] === '__unreviewed__' || f[2] > 0);
 
   return `
-    <div class="mkt-bar">
-      <div class="mkt-search">${I.search}
-        <input id="q" type="search" placeholder="搜索插件名称、作者、仓库或描述…" value="${esc(state.query)}" spellcheck="false" />
+    <div class="mkt-top">
+      <div class="mkt-bar">
+        <div class="mkt-search">${I.search}
+          <input id="q" type="search" placeholder="搜索插件、作者、仓库或描述…" value="${esc(state.query)}" spellcheck="false" />
+        </div>
+        <div class="mkt-actions">
+          <button class="mkt-btn icon" data-act="refresh" title="重新获取目录" aria-label="刷新">${I.refresh}</button>
+          <button class="mkt-btn labeled" data-act="open-dir" title="在资源管理器中打开插件目录">${I.folder}<span class="lb">插件目录</span></button>
+          <button class="mkt-btn labeled" data-act="live" title="直接查询 GitHub topic，发现尚未被收录的新插件">${I.tag}<span class="lb">实时发现</span></button>
+        </div>
       </div>
-      <button class="mkt-btn" data-act="refresh" title="重新获取目录">${I.refresh}刷新</button>
-      <button class="mkt-btn" data-act="open-dir" title="在资源管理器中打开插件目录">${I.folder}插件目录</button>
-      <button class="mkt-btn" data-act="live" title="直接查询 GitHub topic，发现尚未被收录的新插件">${I.tag}实时发现</button>
-    </div>
-    <div class="mkt-sources">
-      ${filters.map(([k, label, n]) =>
-        `<button class="mkt-src${state.typeFilter === k ? ' active' : ''}" data-filter="${k}">${esc(label)}<span class="n">${n}</span></button>`
-      ).join('')}
+      <div class="mkt-filterbar">
+        <div class="mkt-sources">
+          ${filters.map(([k, label, n]) =>
+            `<button class="mkt-src${state.typeFilter === k ? ' active' : ''}" data-filter="${k}">${esc(label)}<span class="n">${n}</span></button>`
+          ).join('')}
+        </div>
+      </div>
+      ${metaLine()}
     </div>`;
 }
 
@@ -1153,10 +1226,8 @@ function metaLine() {
   return `
     <div class="mkt-meta">
       <span class="dot ${dot}"></span>
-      <span>${esc(note)}</span>
-      ${gen ? `<span>· 目录更新于 ${esc(gen)}</span>` : ''}
-      <span>· ${esc(bridge)}</span>
-      <span>· ${esc(capsLine)}</span>
+      <span class="txt" title="${esc(note + (gen ? ' · 目录更新于 ' + gen : ''))}">${esc(note)}${gen ? ` · 更新于 ${esc(gen)}` : ''}</span>
+      <span class="txt opt" title="${esc(bridge + ' · ' + capsLine)}">· ${esc(bridge)} · ${esc(capsLine)}</span>
       <span class="spacer"></span>
       <code>topic:${esc(CONFIG.topic)}</code>
     </div>`;
@@ -1212,7 +1283,7 @@ function render() {
         <div class="mkt-grid">${groups.reviewed.map(card).join('')}</div>`;
     }
     if (groups.unreviewed && groups.unreviewed.length) {
-      body += `<div class="mkt-section-title">未审核（topic 自动收录）· ${groups.unreviewed.length}</div>
+      body += `<div class="mkt-section-title unreviewed">未审核 · topic 自动收录 · ${groups.unreviewed.length}</div>
         <div class="mkt-grid">${groups.unreviewed.map(card).join('')}</div>`;
     }
   }
@@ -1220,12 +1291,14 @@ function render() {
   $('#app').innerHTML = `
     <div class="mkt">
       ${toolbar()}
-      ${metaLine()}
       <div class="mkt-body">${liveBanner()}${body}</div>
       ${pager(pages, page, all.length)}
       <div class="mkt-footer">
-        <b>插件是第三方代码，以你的权限运行。</b>本市场只做来源绑定与静态披露，不构成安全审计。
-        安装即把代码写入插件目录，卸载即删除对应文件夹 —— 请只安装你信任的来源。
+        <span class="txt" title="本市场只做来源绑定与静态披露，不构成安全审计。">
+          ${I.alert}<b>插件是第三方代码，以你的权限运行。</b>本市场只做来源绑定与静态披露，不构成安全审计。
+        </span>
+        <span class="spacer"></span>
+        <code>卸载 = 移入回收站</code>
       </div>
     </div>`;
 
@@ -1338,12 +1411,12 @@ function openUninstallModal(entry) {
   scrim.innerHTML = `
     <div class="mkt-modal" role="dialog" aria-label="卸载插件">
       <div class="mkt-modal-head">
-        <div class="mkt-avatar" style="display:flex;align-items:center;justify-content:center;color:var(--text-dim)">${I.box}</div>
+        <div class="mkt-avatar" style="--h:350">${I.box}</div>
         <div style="flex:1;min-width:0">
           <div class="t">卸载「${esc(entry.name && entry.name !== entry.id ? entry.name : entry.id)}」</div>
-          <div class="s">${esc(entry.id)}</div>
+          <div class="s" title="${esc(entry.id)}">${esc(entry.id)}</div>
         </div>
-        <button class="mkt-btn sm" data-close="1" title="关闭">${I.x}</button>
+        <button class="mkt-btn icon" data-close="1" title="关闭" aria-label="关闭">${I.x}</button>
       </div>
       <div class="mkt-modal-body">
         <div class="mkt-note">
@@ -1407,22 +1480,25 @@ function openInstallModal(entry) {
   const branch = entry.branch || 'main';
   const oneClick = canOneClick();
 
+  const hue = TYPE_HUE[entry.plugin_type] || 220;
+  const icon = I[TYPE_ICON[entry.plugin_type]] || I.box;
+
   const scrim = document.createElement('div');
   scrim.className = 'mkt-scrim';
   scrim.innerHTML = `
     <div class="mkt-modal" role="dialog" aria-label="安装插件">
       <div class="mkt-modal-head">
-        <div class="mkt-avatar" style="display:flex;align-items:center;justify-content:center;color:var(--text-dim)">${I.box}</div>
+        <div class="mkt-avatar" style="--h:${hue}">${icon}</div>
         <div style="flex:1;min-width:0">
           <div class="t">${isInst ? '重新安装' : '安装'}「${esc(entry.name)}」</div>
-          <div class="s">${esc(entry.repo)}${entry.subpath ? ' / ' + esc(entry.subpath) : ''} @ ${esc(branch)}</div>
+          <div class="s" title="${esc(entry.repo)}${entry.subpath ? ' / ' + esc(entry.subpath) : ''} @ ${esc(branch)}">${esc(entry.repo)}${entry.subpath ? ' / ' + esc(entry.subpath) : ''} @ ${esc(branch)}</div>
         </div>
-        <button class="mkt-btn sm" data-close="1" title="关闭">${I.x}</button>
+        <button class="mkt-btn icon" data-close="1" title="关闭" aria-label="关闭">${I.x}</button>
       </div>
 
       <div class="mkt-modal-body">
         <div class="mkt-badges">
-          ${badge(`type-${entry.plugin_type}`, tname, I.tag)}
+          ${badge(`type-${entry.plugin_type}`, tname, icon)}
           ${entry.version ? badge('', 'v' + entry.version) : ''}
           ${entry.license ? badge('', entry.license) : ''}
           ${entry.commit ? badge('info', 'commit ' + entry.commit.slice(0, 10)) : badge('', branch)}
@@ -1431,74 +1507,53 @@ function openInstallModal(entry) {
           ${compatBadge(entry)}
         </div>
 
+        <div class="mkt-block">
+          <div class="h">${I.shield}能力披露</div>
+          ${capabilityBlock(entry)}
+          ${riskLines(entry)}
+        </div>
+
         ${manifestDisclosure(entry).length ? `
         <div class="mkt-block">
-          <div class="h">清单声明</div>
+          <div class="h">${I.info}清单声明</div>
           ${disclosureBlock(entry)}
         </div>` : ''}
 
         ${oneClick ? `
-        <div class="mkt-note plain">
-          ${I.shield}
-          <span>宿主会自己完成下载与落盘：<b>强制 HTTPS</b>、解压时校验路径边界（防 Zip Slip）、
-          安装目录限制在 OpenRevo 的 AppData 下，装完自动重扫。
-          插件是第三方代码，会以你的权限运行 —— 请只安装你信任的来源。</span>
-        </div>
         <div class="mkt-block">
-          <div class="h">安全提示</div>
-          <div class="mkt-steps">
-            <div class="mkt-step"><div class="tx">本操作会把 <code>${esc(entry.repo)}</code>${
-              entry.subpath ? ` 的 <code>${esc(entry.subpath)}</code> 子目录` : ' 的仓库根'
-            }写入 <code>%APPDATA%\\OpenRevo\\plugins\\${esc(entry.id)}\\</code>，同名目录会被覆盖。</div></div>
-            <div class="mkt-step"><div class="tx">${entry.sha256
-              ? '目录里提供了 <b>sha256</b>，宿主会在安装前校验归档指纹 —— 内容被替换会被拒绝。'
-              : '目录条目<b>没有提供 sha256</b>，宿主只能校验传输完整性，不能证明内容未被篡改。'}</div></div>
-          </div>
-        </div>
-        <div class="mkt-block">
-          <div class="h">下载链路</div>
+          <div class="h">${I.down}下载链路</div>
           <label class="mkt-check">
             <input type="checkbox" data-opt="proxy" ${state.useProxy ? 'checked' : ''}>
             <span>走 <b>gh-proxy.com</b> 加速（国内直连 codeload 常常超时）</span>
           </label>
-          <div class="mkt-note plain" style="margin-top:8px">
+          <div class="mkt-note plain">
             ${I.info}
             <span>加速只改下载地址，不改校验与落盘：宿主仍会强制 HTTPS、校验 sha256、按 subpath 定位插件。
-            实测加速后的归档仍保留 <code>${esc(archiveRoot(entry))}/</code> 根目录，因此 <code>subpath</code> 不变。<br/>
-            但<b>宿主会不会接受非 github.com 的下载域名尚未实测</b>—— 若开启后报安全策略错误，
-            关掉这个开关用直连重试。</span>
-          </div>
-        </div>` : `
-        <div class="mkt-note">
-          ${I.alert}
-          <span><b>本版宿主没有开放安装接口</b>（<code>get_plugin_host_capabilities</code> 不可用或 <code>can_install=false</code>），
-          因此市场不能替你完成下载。下面的命令是市场能给出的最短路径：复制它、在终端粘一次即可。</span>
-        </div>
-
-        <div class="mkt-block">
-          <div class="h">安装步骤</div>
-          <div class="mkt-steps">
-            <div class="mkt-step"><div class="tx">点下面的 <b>复制安装命令</b>。<br/>
-              它会把 <code>${esc(entry.repo)}</code> 的 ${entry.subpath ? `子目录 <code>${esc(entry.subpath)}</code>` : '仓库内容'}
-              放到 <code>%APPDATA%\\OpenRevo\\plugins\\${esc(entry.id)}\\</code>。</div></div>
-            <div class="mkt-step"><div class="tx">在 <b>PowerShell</b> 里粘贴并回车（需要本机已装 <code>git</code>）。</div></div>
-            <div class="mkt-step"><div class="tx">回到宿主侧边栏的 <b>插件</b> 页，点右上角 <b>刷新</b>。
-              ${entry.plugin_type === 'skin' ? '皮肤还需在卡片上拨一次开关才会启用。' : '装好后即出现在列表里。'}</div></div>
-            <div class="mkt-step"><div class="tx">想卸载：删掉 <code>plugins\\${esc(entry.id)}</code> 文件夹，再回插件页刷新。</div></div>
+            加速后的归档仍保留 <code>${esc(archiveRoot(entry))}/</code> 根目录，因此 <code>subpath</code> 不变。
+            <b>宿主是否接受非 github.com 的下载域名尚未实测</b> —— 若开启后报安全策略错误，关掉开关用直连重试。</span>
           </div>
         </div>
 
-        <div class="mkt-block">
-          <div class="h">安装命令（PowerShell）</div>
-          <div class="mkt-cmd">${I.copy}<code id="cmd">${esc(cmd)}</code></div>
-        </div>`}
+        <details class="mkt-more">
+          <summary>${I.info}安装会把文件写到哪、校验到什么程度${I.chev}</summary>
+          <div class="mkt-more-body">
+            <div class="mkt-note plain">
+              ${I.shield}
+              <span>宿主自己完成下载与落盘：<b>强制 HTTPS</b>、解压时校验路径边界（防 Zip Slip）、
+              安装目录限制在 OpenRevo 的 AppData 下，装完自动重扫。</span>
+            </div>
+            <div class="mkt-steps">
+              <div class="mkt-step"><div class="tx">本操作会把 <code>${esc(entry.repo)}</code>${
+                entry.subpath ? ` 的 <code>${esc(entry.subpath)}</code> 子目录` : ' 的仓库根'
+              }写入 <code>%APPDATA%\\OpenRevo\\plugins\\${esc(entry.id)}\\</code>，同名目录会被覆盖。</div></div>
+              <div class="mkt-step"><div class="tx">${entry.sha256
+                ? '目录里提供了 <b>sha256</b>，宿主会在安装前校验归档指纹 —— 内容被替换会被拒绝。'
+                : '目录条目<b>没有提供 sha256</b>，宿主只能校验传输完整性，不能证明内容未被篡改。'}</div></div>
+              <div class="mkt-step"><div class="tx">插件是第三方代码，会以你的权限运行 —— 请只安装你信任的来源。</div></div>
+            </div>
+          </div>
+        </details>
 
-        <div class="mkt-block">
-          <div class="h">能力披露</div>
-          ${capabilityBlock(entry)}
-        </div>
-
-        ${oneClick ? `
         <details class="mkt-fallback">
           <summary>${I.info}一键安装失败？手动安装（备用）</summary>
           <div class="mkt-block">
@@ -1513,8 +1568,27 @@ function openInstallModal(entry) {
             <br/>该地址直连不通时，可在前面加 <code>https://gh-proxy.com/</code> 走加速。</span>
           </div>
         </details>` : `
+        <div class="mkt-note">
+          ${I.alert}
+          <span><b>本版宿主没有开放安装接口</b>（<code>get_plugin_host_capabilities</code> 不可用或 <code>can_install=false</code>），
+          因此市场不能替你完成下载。下面的命令是市场能给出的最短路径：复制它、在终端粘一次即可。</span>
+        </div>
+
         <div class="mkt-block">
-          <div class="h">安装命令（PowerShell）</div>
+          <div class="h">${I.down}安装步骤</div>
+          <div class="mkt-steps">
+            <div class="mkt-step"><div class="tx">点下面的 <b>复制安装命令</b>。<br/>
+              它会把 <code>${esc(entry.repo)}</code> 的 ${entry.subpath ? `子目录 <code>${esc(entry.subpath)}</code>` : '仓库内容'}
+              放到 <code>%APPDATA%\\OpenRevo\\plugins\\${esc(entry.id)}\\</code>。</div></div>
+            <div class="mkt-step"><div class="tx">在 <b>PowerShell</b> 里粘贴并回车（需要本机已装 <code>git</code>）。</div></div>
+            <div class="mkt-step"><div class="tx">回到宿主侧边栏的 <b>插件</b> 页，点右上角 <b>刷新</b>。
+              ${entry.plugin_type === 'skin' ? '皮肤还需在卡片上拨一次开关才会启用。' : '装好后即出现在列表里。'}</div></div>
+            <div class="mkt-step"><div class="tx">想卸载：删掉 <code>plugins\\${esc(entry.id)}</code> 文件夹，再回插件页刷新。</div></div>
+          </div>
+        </div>
+
+        <div class="mkt-block">
+          <div class="h">${I.copy}安装命令（PowerShell）</div>
           <div class="mkt-cmd">${I.copy}<code id="cmd">${esc(cmd)}</code></div>
         </div>
 
@@ -1530,10 +1604,10 @@ function openInstallModal(entry) {
 
       <div class="mkt-modal-foot">
         <button class="mkt-btn" data-close="1">关闭</button>
-        <button class="mkt-btn" data-act2="open-repo">${I.tag}打开源码</button>
-        <button class="mkt-btn" data-act2="copy-cmd">${I.copy}复制命令</button>
+        <button class="mkt-btn labeled" data-act2="open-repo">${I.tag}<span class="lb">打开源码</span></button>
+        <button class="mkt-btn labeled" data-act2="copy-cmd">${I.copy}<span class="lb">复制命令</span></button>
         <span class="spacer"></span>
-        <button class="mkt-btn" data-act2="open-dir">${I.folder}打开插件目录</button>
+        <button class="mkt-btn labeled" data-act2="open-dir">${I.folder}<span class="lb">打开插件目录</span></button>
         ${oneClick
           ? `<button class="mkt-btn primary" data-act2="install-now">${I.down}${isInst ? '重新安装' : '立即安装'}</button>`
           : ''}

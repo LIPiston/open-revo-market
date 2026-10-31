@@ -17,19 +17,26 @@
  * OpenRevo 插件市场 · 样式
  * 由 build_market.py 内联进 plugin-market/index.html —— 必须保持单文件无外部引用。
  *
- * 令牌刻意与宿主 :root 同名同值（v0.9.1 index-CQ_flESn.css @9660）。
- * 注意：srcDoc iframe 是独立文档，宿主 CSS 变量**不会**跨 iframe 继承，
- * 所以这里必须自带一份完整令牌面，不能依赖宿主。
+ * 两条硬约束，改版时必须守住：
+ *
+ *  1. **自带不透明底色**。宿主把插件作为 srcDoc 注入 iframe，iframe 的
+ *     `background: transparent` 会露出宿主面板的底色；真实宿主里那块是浅色，
+ *     深色文字令牌压上去整页发白（v1.2.0 实测事故）。所以这里自己画底，
+ *     令牌与底色永远成对出现，不赌宿主背景色。
+ *
+ *  2. **宿主令牌不继承**。iframe 是独立文档，:root 变量不会跨文档继承，
+ *     因此这里自带一份完整令牌面；`html[data-theme]` 只用来跟随宿主主题。
  * ========================================================================== */
 
 :root {
+  /* --- 宿主同名令牌（v0.9.x index-*.css）--- */
   --surface-base: rgba(11, 14, 20, .94);
   --surface-card: rgba(22, 27, 34, .75);
   --surface-card-hover: rgba(33, 38, 45, .85);
   --surface-card-active: rgba(40, 46, 56, .92);
   --surface-pill: rgba(255, 255, 255, .05);
   --surface-pill-hover: rgba(255, 255, 255, .1);
-  --surface-sunken: rgba(0, 0, 0, .35);
+  --surface-sunken: rgba(0, 0, 0, .32);
   --surface-overlay: rgba(15, 23, 42, .85);
   --surface-badge: rgba(255, 255, 255, .06);
   --border-subtle: rgba(255, 255, 255, .08);
@@ -57,16 +64,29 @@
   --status-info-dim: rgba(56, 189, 248, .15);
   --color-brand: #6366f1;
   --accent: #6366f1;
-  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Microsoft YaHei", sans-serif;
+  --grad-brand: linear-gradient(180deg, #7c7ff7, #5b5ee8);
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
   --font-mono: "JetBrains Mono", "Cascadia Mono", Consolas, monospace;
+
+  /* --- 市场自有令牌：底色与层次（不透明，绝不依赖宿主）--- */
+  --app-bg: #0a0d13;
+  --app-bg-top: #101623;
+  --app-glow: rgba(99, 102, 241, .13);
+  --card-bg: #121822;
+  --card-bg-hover: #171e2b;
+  --card-border: rgba(255, 255, 255, .07);
+  --card-border-hover: rgba(255, 255, 255, .16);
+  --head-bg: rgba(12, 16, 24, .86);
+  --shadow-card: 0 1px 0 rgba(255, 255, 255, .03) inset;
+  --shadow-pop: 0 18px 48px rgba(0, 0, 0, .55);
 }
 
-/* 浅色主题：宿主当前只在 cyber / mono 间切换，但预览页与未来 light 皮肤下也能用 */
+/* 浅色：宿主目前只有 cyber / mono，但保留一份可用面，别让未来切主题时整页发白 */
 html[data-theme="light"] {
-  --surface-base: #f4f6fb;
+  --surface-base: #ffffff;
   --surface-card: #ffffff;
-  --surface-card-hover: #eef2f9;
-  --surface-card-active: #e6ecf6;
+  --surface-card-hover: #f5f8fd;
+  --surface-card-active: #e9eff8;
   --surface-pill: rgba(15, 23, 42, .05);
   --surface-pill-hover: rgba(15, 23, 42, .1);
   --surface-sunken: rgba(15, 23, 42, .06);
@@ -78,67 +98,65 @@ html[data-theme="light"] {
   --text-secondary: #334155;
   --text-muted: #64748b;
   --text-dim: #94a3b8;
+  --app-bg: #f4f7fc;
+  --app-bg-top: #ffffff;
+  --app-glow: rgba(99, 102, 241, .1);
+  --card-bg: #ffffff;
+  --card-bg-hover: #f7f9fd;
+  --card-border: rgba(15, 23, 42, .1);
+  --card-border-hover: rgba(15, 23, 42, .2);
+  --head-bg: rgba(255, 255, 255, .9);
+  --shadow-card: 0 1px 2px rgba(15, 23, 42, .05);
+  --shadow-pop: 0 18px 44px rgba(15, 23, 42, .18);
 }
 
-/* mono：宿主 data-theme=mono 是整套去饱和（连功能色都退成灰阶），
-   所以这里的类型徽标、强调按钮也必须跟着去色 —— 只调 --accent 是不够的，
-   下面几条彩色规则是硬编码值，必须单独覆盖。 */
+/* mono：宿主整套去饱和（连功能色都退成灰阶），彩色规则必须单独覆盖，
+   只调 --accent 不够 —— 下面带硬编码色相的规则全部要压回灰阶。 */
 html[data-theme="mono"] {
   --accent: #e2e8f0;
   --color-brand: #cbd5e1;
+  --grad-brand: linear-gradient(180deg, #3a4048, #2a2f36);
   --status-ok-dim: rgba(255, 255, 255, .08);
   --status-warn-dim: rgba(255, 255, 255, .08);
   --status-info-dim: rgba(255, 255, 255, .08);
   --status-error-dim: rgba(255, 255, 255, .08);
+  --app-bg: #0b0d10;
+  --app-bg-top: #14171c;
+  --app-glow: rgba(255, 255, 255, .05);
+  --card-bg: #131720;
+  --card-bg-hover: #181d26;
 }
-html[data-theme="mono"] .mkt-badge.type-skin,
-html[data-theme="mono"] .mkt-badge.type-background,
-html[data-theme="mono"] .mkt-badge.type-tab,
-html[data-theme="mono"] .mkt-badge.type-widget,
-html[data-theme="mono"] .mkt-badge.type-slot,
-html[data-theme="mono"] .mkt-badge.type-service,
-html[data-theme="mono"] .mkt-badge.type-shell,
-html[data-theme="mono"] .mkt-badge.type-driver,
-html[data-theme="mono"] .mkt-badge.ok,
-html[data-theme="mono"] .mkt-badge.warn,
-html[data-theme="mono"] .mkt-badge.info {
-  color: var(--text-secondary);
-  background: var(--surface-badge);
-  border-color: var(--border-subtle);
-}
-html[data-theme="mono"] .mkt-btn.primary {
-  color: var(--text-primary);
-  background: var(--surface-pill-hover);
-  border-color: var(--border-highlight);
-}
-html[data-theme="mono"] .mkt-btn.primary:hover {
-  color: #fff;
-  background: var(--surface-card-active);
-}
-html[data-theme="mono"] .mkt-note {
-  background: var(--surface-sunken);
-  border-color: var(--border-subtle);
-}
-html[data-theme="mono"] .mkt-note svg { color: var(--text-dim); }
-html[data-theme="mono"] .mkt-card.installed { border-color: var(--border-highlight); }
-html[data-theme="mono"] .mkt-toast.err { color: var(--text-primary); border-color: var(--border-highlight); }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* 兜底：内联 SVG 没有尺寸会把父容器撑爆（页脚那颗警示图标曾撑满整页）。
+   具体组件规则写在后面、同优先级，会覆盖这里。 */
+.mkt svg, .mkt-scrim svg { width: 13px; height: 13px; flex-shrink: 0; }
+
 html, body {
   height: 100%;
-  background: transparent;
   color: var(--text-primary);
   font-family: var(--font-sans);
   font-size: 13px;
+  line-height: 1.5;
   overflow: hidden;
+  /* 不透明底：iframe 透明时露出的宿主底色不可控，见文件头说明。 */
+  background-color: var(--app-bg);
 }
 
-body { user-select: none; -webkit-user-select: none; }
+body {
+  background-image:
+    radial-gradient(1100px 420px at 10% -10%, var(--app-glow) 0%, transparent 62%),
+    linear-gradient(180deg, var(--app-bg-top) 0%, var(--app-bg) 46%);
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
 
-/* #app 必须显式撑满：它是 .mkt 的父节点，少了这一层 `.mkt { height:100% }`
- * 会退化成 auto，.mkt-body 的 overflow:auto 就永远不触发
- * （实测 scrollHeight == clientHeight，插件一多整页滚不动）。 */
+/* #app 必须显式撑满：少了这一层 `.mkt{height:100%}` 会退化成 auto，
+   .mkt-body 的 overflow:auto 永不触发（实测 scrollHeight == clientHeight）。 */
 #app { height: 100%; min-height: 0; display: flex; flex-direction: column; }
 
 .mkt {
@@ -146,202 +164,355 @@ body { user-select: none; -webkit-user-select: none; }
   flex-direction: column;
   flex: 1 1 0%;
   min-height: 0;
-  gap: 10px;
-  padding: 12px 14px 14px;
 }
 
-/* ---------------------------------------------------------------- toolbar */
+/* ------------------------------------------------------------------ 顶栏 */
+.mkt-top {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 13px 16px 10px;
+  background: var(--head-bg);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--border-subtle);
+  z-index: 2;
+}
+
 .mkt-bar {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
   gap: 8px;
-  flex-shrink: 0;
+  flex-wrap: nowrap;
 }
 
+/* 搜索框是主入口，吃掉剩余宽度；按钮固定宽度不换行 */
 .mkt-search {
   position: relative;
-  flex: 1 1 240px;
-  min-width: 180px;
+  flex: 1 1 auto;
+  min-width: 120px;
   display: flex;
   align-items: center;
 }
-.mkt-search svg { position: absolute; left: 9px; width: 13px; height: 13px; color: var(--text-dim); pointer-events: none; }
+.mkt-search svg {
+  position: absolute;
+  left: 11px;
+  width: 14px;
+  height: 14px;
+  color: var(--text-dim);
+  pointer-events: none;
+  transition: color var(--transition-fast);
+}
 .mkt-search input {
   width: 100%;
-  height: 30px;
-  padding: 0 10px 0 28px;
+  height: 34px;
+  padding: 0 12px 0 32px;
   font: inherit;
-  font-size: 12px;
+  font-size: 12.5px;
   color: var(--text-primary);
   background: var(--surface-pill);
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
+  border-radius: 10px;
   outline: none;
   user-select: text;
   -webkit-user-select: text;
-  transition: border-color var(--transition-fast), background var(--transition-fast);
+  transition: border-color var(--transition-fast), background var(--transition-fast), box-shadow var(--transition-fast);
 }
 .mkt-search input::placeholder { color: var(--text-dim); }
-.mkt-search input:focus { border-color: var(--border-highlight); background: var(--surface-pill-hover); }
+.mkt-search input:focus {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: var(--surface-pill-hover);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.mkt-search input::-webkit-search-cancel-button { -webkit-appearance: none; }
+.mkt-search:focus-within svg { color: var(--text-muted); }
 
+.mkt-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+
+/* ---------------------------------------------------------------- 按钮 */
 .mkt-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  height: 30px;
-  padding: 0 11px;
+  height: 34px;
+  padding: 0 12px;
   font: inherit;
   font-size: 11.5px;
   font-weight: 600;
+  letter-spacing: .01em;
   color: var(--text-muted);
-  background: #ffffff0d;
+  background: var(--surface-pill);
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
+  border-radius: 9px;
   cursor: pointer;
   white-space: nowrap;
-  transition: all var(--transition-fast);
+  transition: background var(--transition-fast), border-color var(--transition-fast),
+              color var(--transition-fast), transform var(--transition-fast);
 }
-.mkt-btn:hover { background: var(--surface-pill-hover); color: var(--text-primary); }
+.mkt-btn:hover {
+  background: var(--surface-pill-hover);
+  border-color: var(--border-medium);
+  color: var(--text-primary);
+}
 .mkt-btn:active { transform: translateY(1px); }
-.mkt-btn:disabled { opacity: .5; cursor: default; transform: none; }
-.mkt-btn.primary {
-  color: #eef2ff;
-  background: linear-gradient(135deg, #6366f140, #6366f114);
-  border-color: #6366f1b3;
+.mkt-btn:focus-visible {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
 }
-.mkt-btn.primary:hover { background: linear-gradient(135deg, #6366f159, #6366f126); color: #fff; }
+.mkt-btn:disabled { opacity: .45; cursor: default; transform: none; }
+.mkt-btn svg { width: 14px; height: 14px; flex-shrink: 0; }
+
+/* 图标按钮：窄屏下只留图标，靠 title 说明 */
+.mkt-btn.icon { width: 34px; padding: 0; }
+
+.mkt-btn.primary {
+  color: #fff;
+  background: var(--grad-brand);
+  border-color: color-mix(in srgb, #7c7ff7 70%, transparent);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .16) inset, 0 6px 16px -6px color-mix(in srgb, var(--accent) 70%, transparent);
+}
+.mkt-btn.primary:hover {
+  background: var(--grad-brand);
+  filter: brightness(1.08);
+  border-color: color-mix(in srgb, #8b8efb 80%, transparent);
+  color: #fff;
+}
 .mkt-btn.danger {
   color: var(--status-error);
-  border-color: color-mix(in srgb, var(--status-error) 45%, transparent);
+  border-color: color-mix(in srgb, var(--status-error) 40%, transparent);
   background: var(--status-error-dim);
 }
 .mkt-btn.danger:hover {
   color: #fff;
   background: color-mix(in srgb, var(--status-error) 30%, transparent);
+  border-color: color-mix(in srgb, var(--status-error) 60%, transparent);
 }
+.mkt-btn.sm { height: 27px; padding: 0 10px; font-size: 11px; border-radius: 7px; }
+.mkt-btn.sm svg { width: 12px; height: 12px; }
+
+/* mono 下强调按钮退成中性高亮，不保留紫色 */
+html[data-theme="mono"] .mkt-btn.primary {
+  color: var(--text-primary);
+  background: var(--surface-pill-hover);
+  border-color: var(--border-highlight);
+  box-shadow: none;
+}
+html[data-theme="mono"] .mkt-btn.primary:hover { background: var(--surface-card-active); color: #fff; }
 html[data-theme="mono"] .mkt-btn.danger {
   background: var(--surface-pill);
   border-color: var(--border-medium);
 }
-.mkt-btn svg { width: 13px; height: 13px; }
 
-.mkt-btn.sm { height: 24px; padding: 0 9px; font-size: 11px; }
-
-/* ------------------------------------------------------------- source tabs */
-.mkt-sources { display: flex; gap: 6px; flex-shrink: 0; }
+/* ------------------------------------------------------- 筛选（chip 行） */
+.mkt-filterbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.mkt-sources {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 1px;
+}
+.mkt-sources::-webkit-scrollbar { display: none; }
 
 .mkt-src {
-  height: 30px;
-  padding: 0 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 27px;
+  padding: 0 10px;
   font: inherit;
   font-size: 11.5px;
   font-weight: 600;
   color: var(--text-muted);
-  background: #ffffff09;
-  border: 1px solid rgba(255, 255, 255, .07);
-  border-radius: var(--radius-md);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-full);
   cursor: pointer;
   white-space: nowrap;
-  transition: all .16s cubic-bezier(.16, 1, .3, 1);
+  transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
 }
-.mkt-src:hover { color: var(--text-secondary); background: var(--surface-pill-hover); }
+.mkt-src:hover { color: var(--text-secondary); background: var(--surface-pill); }
+.mkt-src .n {
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+  background: var(--surface-badge);
+  border-radius: var(--radius-full);
+  padding: 0 5px;
+  min-width: 17px;
+  text-align: center;
+  line-height: 15px;
+  transition: inherit;
+}
 .mkt-src.active {
   color: var(--text-primary);
   background: var(--surface-card-active);
   border-color: var(--border-medium);
 }
-.mkt-src .n { color: var(--text-dim); font-weight: 600; margin-left: 5px; }
-.mkt-src.active .n { color: var(--text-muted); }
+.mkt-src.active .n {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
+}
+html[data-theme="mono"] .mkt-src.active .n { background: var(--surface-pill-hover); }
 
-/* ------------------------------------------------------------------ meta */
+/* 目录/宿主状态：一行，可省略 —— 不占第二行 */
 .mkt-meta {
   display: flex;
   align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  flex-shrink: 0;
+  gap: 7px;
+  min-width: 0;
   font-size: 10.5px;
   color: var(--text-dim);
 }
-.mkt-meta .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--status-ok); flex-shrink: 0; }
-.mkt-meta .dot.warn { background: var(--status-warn); }
-.mkt-meta .dot.err { background: var(--status-error); }
+.mkt-meta .dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--status-ok);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-ok) 18%, transparent);
+  flex-shrink: 0;
+}
+.mkt-meta .dot.warn { background: var(--status-warn); box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-warn) 18%, transparent); }
+.mkt-meta .dot.err { background: var(--status-error); box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-error) 18%, transparent); }
 .mkt-meta .spacer { flex: 1; }
+.mkt-meta .txt {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
 .mkt-meta code {
   font-family: var(--font-mono);
   font-size: 10px;
   color: var(--text-muted);
+  background: var(--surface-badge);
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
   user-select: text;
   -webkit-user-select: text;
+  white-space: nowrap;
 }
 
-/* ---------------------------------------------------------------- content */
-.mkt-body { flex: 1 1 0%; min-height: 0; overflow-y: auto; overflow-x: hidden; padding-right: 2px; }
-.mkt-body::-webkit-scrollbar { width: 6px; }
+/* ---------------------------------------------------------------- 内容区 */
+.mkt-body {
+  flex: 1 1 0%;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 14px 16px 4px;
+  scrollbar-gutter: stable;
+}
+.mkt-body::-webkit-scrollbar { width: 8px; }
 .mkt-body::-webkit-scrollbar-track { background: transparent; }
-.mkt-body::-webkit-scrollbar-thumb { background: #ffffff29; border-radius: var(--radius-full); }
-.mkt-body::-webkit-scrollbar-thumb:hover { background: #ffffff52; }
+.mkt-body::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, .14);
+  border-radius: var(--radius-full);
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+.mkt-body::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, .28); background-clip: content-box; }
+html[data-theme="light"] .mkt-body::-webkit-scrollbar-thumb { background: rgba(15, 23, 42, .18); background-clip: content-box; }
 
 .mkt-section-title {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 4px 0 8px;
+  margin: 2px 0 9px;
   font-size: 11px;
   font-weight: 700;
-  letter-spacing: .04em;
+  letter-spacing: .03em;
   color: var(--text-muted);
-  text-transform: uppercase;
 }
+.mkt-section-title::before {
+  content: "";
+  width: 3px; height: 11px;
+  border-radius: var(--radius-full);
+  background: var(--accent);
+  flex-shrink: 0;
+}
+.mkt-section-title.unreviewed::before { background: var(--status-warn); }
 .mkt-section-title::after { content: ""; flex: 1; height: 1px; background: var(--border-subtle); }
+.mkt-section-title + .mkt-grid { margin-bottom: 14px; }
 
 .mkt-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(272px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(296px, 1fr));
   gap: 10px;
-  margin-bottom: 16px;
 }
 
-/* ------------------------------------------------------------------- card */
+/* ------------------------------------------------------------------- 卡片 */
 .mkt-card {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 12px;
-  background: var(--surface-card);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  backdrop-filter: blur(12px);
-  transition: all .2s cubic-bezier(.16, 1, .3, 1);
+  gap: 9px;
+  padding: 13px 14px 12px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  transition: background var(--transition-fast), border-color var(--transition-fast),
+              transform var(--transition-fast), box-shadow var(--transition-fast);
 }
-.mkt-card:hover { background: var(--surface-card-hover); border-color: var(--border-medium); }
-.mkt-card.installed { border-color: color-mix(in srgb, var(--status-ok) 45%, transparent); }
-.mkt-card.busy { opacity: .72; pointer-events: none; }
-
-/* 宿主没有安装 IPC 时，卡片底部明说「只能给命令」，避免点下去才发现做不到 */
-.mkt-card-hint {
-  display: flex; align-items: center; gap: 5px;
-  font-size: 10.5px; line-height: 1.4; color: var(--text-dim);
-  padding-top: 6px; border-top: 1px dashed var(--border-subtle);
+.mkt-card:hover {
+  background: var(--card-bg-hover);
+  border-color: var(--card-border-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px -14px rgba(0, 0, 0, .7);
 }
-.mkt-card-hint svg { width: 11px; height: 11px; flex-shrink: 0; }
+/* 已安装：左侧强调条，不用整块绿框（绿框太吵，且和「已审核」争注意力） */
+.mkt-card.installed { padding-left: 15px; }
+.mkt-card.installed::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 12px; bottom: 12px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--status-ok);
+  opacity: .85;
+}
+.mkt-card.busy { opacity: .6; pointer-events: none; }
 
-.mkt-card-head { display: flex; align-items: flex-start; gap: 9px; }
+.mkt-card-head { display: flex; align-items: flex-start; gap: 10px; }
+
+/* 形态图标：每个 plugin_type 一个色相，卡头与徽标同源 */
 .mkt-avatar {
-  width: 30px; height: 30px; flex-shrink: 0;
-  border-radius: var(--radius-xs);
-  object-fit: cover;
-  background: var(--surface-badge);
-  border: 1px solid var(--border-subtle);
+  --h: 235;
+  width: 34px; height: 34px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  color: hsl(var(--h) 90% 78%);
+  background: linear-gradient(150deg,
+    hsl(var(--h) 80% 60% / .3),
+    hsl(var(--h) 80% 55% / .08));
+  border: 1px solid hsl(var(--h) 80% 60% / .3);
 }
+.mkt-avatar svg { width: 17px; height: 17px; }
+html[data-theme="mono"] .mkt-avatar {
+  color: var(--text-secondary);
+  background: var(--surface-pill);
+  border-color: var(--border-subtle);
+}
+
 .mkt-card-titles { min-width: 0; flex: 1; }
 .mkt-card-name {
-  font-size: 12.5px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .01em;
   color: var(--text-primary);
-  line-height: 1.3;
+  line-height: 1.35;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -353,132 +524,285 @@ html[data-theme="mono"] .mkt-btn.danger {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  margin-top: 1px;
   user-select: text;
   -webkit-user-select: text;
 }
 
+/* ------------------------------------------------------------------ 徽标 */
 .mkt-badges { display: flex; flex-wrap: wrap; gap: 4px; }
 
 .mkt-badge {
+  --h: 220;
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  padding: 1px 6px;
+  padding: 1px 7px;
   font-size: 9.5px;
   font-weight: 600;
-  line-height: 1.6;
+  line-height: 1.65;
+  letter-spacing: .01em;
   border-radius: var(--radius-full);
-  background: var(--surface-badge);
   color: var(--text-muted);
+  background: var(--surface-badge);
   border: 1px solid transparent;
   white-space: nowrap;
 }
 .mkt-badge svg { width: 9px; height: 9px; }
-.mkt-badge.type-skin { color: #a5b4fc; background: #6366f126; border-color: #6366f14d; }
-.mkt-badge.type-background { color: #fcd34d; background: #f59e0b26; border-color: #f59e0b4d; }
-.mkt-badge.type-tab { color: #7dd3fc; background: #38bdf826; border-color: #38bdf84d; }
-.mkt-badge.type-widget { color: #6ee7b7; background: #10b98126; border-color: #10b9814d; }
-.mkt-badge.type-slot { color: #c4b5fd; background: #8b5cf626; border-color: #8b5cf64d; }
-.mkt-badge.type-service { color: #fda4af; background: #f43f5e26; border-color: #f43f5e4d; }
-.mkt-badge.type-shell { color: #5eead4; background: #14b8a626; border-color: #14b8a64d; }
-.mkt-badge.type-driver { color: #fdba74; background: #f9731626; border-color: #f973164d; }
-.mkt-badge.ok { color: var(--status-ok); background: var(--status-ok-dim); border-color: color-mix(in srgb, var(--status-ok) 35%, transparent); }
-.mkt-badge.warn { color: var(--status-warn); background: var(--status-warn-dim); border-color: color-mix(in srgb, var(--status-warn) 35%, transparent); }
-.mkt-badge.info { color: var(--status-info); background: var(--status-info-dim); border-color: color-mix(in srgb, var(--status-info) 35%, transparent); }
+
+/* 形态配色：只按 plugin_type 取值上色，不据此推断任何运行期行为 */
+.mkt-badge[class*="type-"] {
+  color: hsl(var(--h) 88% 76%);
+  background: hsl(var(--h) 80% 58% / .14);
+  border-color: hsl(var(--h) 80% 58% / .32);
+}
+.mkt-badge.type-skin { --h: 235; }
+.mkt-badge.type-background { --h: 38; }
+.mkt-badge.type-tab { --h: 200; }
+.mkt-badge.type-widget { --h: 160; }
+.mkt-badge.type-slot { --h: 265; }
+.mkt-badge.type-service { --h: 350; }
+.mkt-badge.type-shell { --h: 172; }
+.mkt-badge.type-driver { --h: 24; }
+
+.mkt-badge.ok {
+  color: var(--status-ok);
+  background: var(--status-ok-dim);
+  border-color: color-mix(in srgb, var(--status-ok) 35%, transparent);
+}
+.mkt-badge.warn {
+  color: var(--status-warn);
+  background: var(--status-warn-dim);
+  border-color: color-mix(in srgb, var(--status-warn) 35%, transparent);
+}
+.mkt-badge.info {
+  color: var(--status-info);
+  background: var(--status-info-dim);
+  border-color: color-mix(in srgb, var(--status-info) 35%, transparent);
+}
+
+/* mono：宿主整套去饱和，彩色的形态/状态徽标必须一起退灰 */
+html[data-theme="mono"] .mkt-badge[class*="type-"],
+html[data-theme="mono"] .mkt-badge.ok,
+html[data-theme="mono"] .mkt-badge.warn,
+html[data-theme="mono"] .mkt-badge.info,
+html[data-theme="mono"] .mkt-cap.ok,
+html[data-theme="mono"] .mkt-cap.warn {
+  color: var(--text-secondary);
+  background: var(--surface-badge);
+  border-color: var(--border-subtle);
+}
 
 .mkt-card-desc {
-  font-size: 11px;
-  line-height: 1.5;
+  font-size: 11.5px;
+  line-height: 1.55;
   color: var(--text-muted);
   display: -webkit-box;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  min-height: 33px;
+  min-height: 36px;
 }
 .mkt-card-desc.empty { color: var(--text-dim); font-style: italic; }
 
-.mkt-card-foot { display: flex; align-items: center; gap: 6px; margin-top: auto; }
-.mkt-card-stat { font-size: 10px; color: var(--text-dim); display: inline-flex; align-items: center; gap: 3px; }
-.mkt-card-stat svg { width: 10px; height: 10px; }
-.mkt-card-foot .spacer { flex: 1; }
+/* -------------------------------------------------- 能力摘要（始终可见） */
+/* 安全信息不折叠：卡片上永远有一行「扫没扫过 / 检出什么」。
+   清单自述的细节才放进 <details>，避免每张卡片都铺 6 行样板字。 */
+.mkt-cap {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 6px 9px;
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  background: var(--surface-sunken);
+  border: 1px solid transparent;
+  border-radius: 7px;
+}
+.mkt-cap svg { width: 12px; height: 12px; flex-shrink: 0; margin-top: 1px; color: var(--text-dim); }
+.mkt-cap b { color: var(--text-secondary); font-weight: 600; }
+.mkt-cap.ok { border-color: color-mix(in srgb, var(--status-ok) 22%, transparent); }
+.mkt-cap.ok svg { color: var(--status-ok); }
+/* 「未扫描」不是一个发现：留一行安静的浅底文字，不用告警框抢注意力 */
+.mkt-cap.quiet {
+  padding-left: 2px;
+  background: transparent;
+  border-color: transparent;
+}
+.mkt-cap.quiet b { color: var(--text-muted); }
+.mkt-cap.quiet svg { color: var(--text-dim); }
+.mkt-cap.warn {
+  color: var(--text-secondary);
+  border-color: color-mix(in srgb, var(--status-warn) 30%, transparent);
+  background: color-mix(in srgb, var(--status-warn) 8%, transparent);
+}
+.mkt-cap.warn svg { color: var(--status-warn); }
 
-/* -------------------------------------------------------------- lifecycle */
-/* 已装插件才有这一行。启用/停用是两个按钮而不是开关：宿主不返回开关态，
-  画成 toggle 就等于替宿主断言一个市场并不知道的状态。 */
+/* 能力风险：单独一行小警示，不塞进摘要挤成一团 */
+.mkt-risk {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: color-mix(in srgb, var(--status-warn) 88%, var(--text-primary));
+}
+.mkt-risk svg { width: 12px; height: 12px; flex-shrink: 0; margin-top: 2px; color: var(--status-warn); }
+
+/* --------------------------------------------------- 清单声明（可折叠） */
+.mkt-more { margin-top: -1px; }
+.mkt-more > summary {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-dim);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  padding: 2px 0;
+  transition: color var(--transition-fast);
+}
+.mkt-more > summary::-webkit-details-marker { display: none; }
+.mkt-more > summary:hover { color: var(--text-secondary); }
+.mkt-more > summary svg:first-child { width: 11px; height: 11px; flex-shrink: 0; }
+.mkt-more > summary .chev {
+  width: 11px; height: 11px;
+  margin-left: auto;
+  transition: transform var(--transition-fast);
+}
+.mkt-more[open] > summary { color: var(--text-secondary); }
+.mkt-more[open] > summary .chev { transform: rotate(180deg); }
+.mkt-more-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 7px;
+  animation: mkt-fade .14s ease;
+}
+
+/* --------------------------------------------------------- 披露（键值行） */
+.mkt-disc { display: flex; flex-direction: column; gap: 3px; }
+.mkt-disc-item {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  padding: 4px 8px;
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  background: var(--surface-sunken);
+  border-radius: 6px;
+  border-left: 2px solid var(--border-medium);
+}
+.mkt-disc-item b { color: var(--text-secondary); font-weight: 600; }
+.mkt-disc-item svg { width: 11px; height: 11px; flex-shrink: 0; margin-top: 1px; color: var(--text-dim); }
+.mkt-disc-item.warn { border-left-color: var(--status-warn); }
+.mkt-disc-item.warn svg { color: var(--status-warn); }
+.mkt-disc-item.info { border-left-color: color-mix(in srgb, var(--status-info) 55%, transparent); }
+.mkt-disc-item.info svg { color: var(--status-info); }
+.mkt-disc-none { font-size: 10px; color: var(--text-dim); }
+
+/* ------------------------------------------------------------ 卡片底部 */
+.mkt-card-foot {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: auto;
+  padding-top: 9px;
+  border-top: 1px solid var(--border-subtle);
+}
+.mkt-card-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  color: var(--text-dim);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mkt-card-stat svg { width: 10px; height: 10px; flex-shrink: 0; }
+.mkt-card-foot .spacer { flex: 1; flex-basis: 6px; }
+
+/* 宿主没有安装 IPC：说明一句就够，不做整块警示 */
+.mkt-card-hint {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: -3px;
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--text-dim);
+}
+.mkt-card-hint svg { width: 11px; height: 11px; flex-shrink: 0; }
+
+/* ------------------------------------------------------- 生命周期（已装） */
+/* 启用/停用是两个幂等动作，不是开关：宿主不返回开关态，
+   画成 toggle 就等于替宿主断言一个市场并不知道的状态。 */
 .mkt-lifecycle {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   flex-wrap: wrap;
-  padding-top: 7px;
-  border-top: 1px solid var(--border-subtle);
+  padding-top: 8px;
+  border-top: 1px dashed var(--border-subtle);
 }
-.mkt-lifecycle .spacer { flex: 1; min-width: 6px; }
-
+.mkt-lifecycle .spacer { flex: 1; min-width: 4px; }
 .mkt-lifecycle-svc {
   display: inline-flex;
   align-items: center;
   gap: 5px;
   font-size: 10px;
   color: var(--text-dim);
+  min-width: 0;
 }
 .mkt-lifecycle-svc .dot {
   width: 5px; height: 5px; border-radius: 50%;
   background: var(--status-ok);
   flex-shrink: 0;
 }
-/* 状态点只表达「查到了什么」：还没查出来时用暗色，查不到时用错误色。
-   它们不是绿/红两态的开关指示，所以不写 running/stopped。 */
 .mkt-lifecycle-svc .dot.err { background: var(--status-error); }
 .mkt-lifecycle-svc > span[data-svc-status] {
-  max-width: 140px;
+  max-width: 132px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* -------------------------------------------------------------- disclosure */
-.mkt-disc { display: flex; flex-direction: column; gap: 4px; }
-.mkt-disc-item {
-  display: flex;
-  gap: 6px;
-  padding: 5px 7px;
-  font-size: 10px;
-  line-height: 1.45;
-  color: var(--text-muted);
-  background: var(--surface-sunken);
-  border-radius: var(--radius-xs);
-  border-left: 2px solid var(--border-medium);
-}
-.mkt-disc-item.warn { border-left-color: var(--status-warn); }
-.mkt-disc-item.info { border-left-color: var(--status-info); }
-.mkt-disc-item svg { width: 11px; height: 11px; flex-shrink: 0; margin-top: 1px; }
-.mkt-disc-item.warn svg { color: var(--status-warn); }
-.mkt-disc-item.info svg { color: var(--status-info); }
-.mkt-disc-none { font-size: 10px; color: var(--text-dim); }
-
-/* ------------------------------------------------------------------- misc */
+/* ------------------------------------------------------------------ 空态 */
 .mkt-empty {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  padding: 48px 20px;
+  gap: 8px;
+  padding: 56px 20px;
   color: var(--text-dim);
   text-align: center;
 }
-.mkt-empty svg { width: 30px; height: 30px; opacity: .55; }
+.mkt-empty svg { width: 32px; height: 32px; opacity: .5; }
 .mkt-empty .t { font-size: 13px; font-weight: 600; color: var(--text-muted); }
-.mkt-empty .d { font-size: 11px; line-height: 1.6; max-width: 460px; }
-.mkt-empty code { font-family: var(--font-mono); color: var(--text-muted); user-select: text; -webkit-user-select: text; }
+.mkt-empty .d { font-size: 11.5px; line-height: 1.7; max-width: 460px; }
+.mkt-empty code {
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  background: var(--surface-badge);
+  padding: 1px 5px;
+  border-radius: var(--radius-xs);
+  user-select: text;
+  -webkit-user-select: text;
+}
 
 .mkt-skel {
-  height: 108px;
-  border-radius: var(--radius-md);
-  background: linear-gradient(100deg, var(--surface-card) 30%, var(--surface-card-hover) 50%, var(--surface-card) 70%);
+  height: 176px;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(100deg, var(--card-bg) 30%, var(--card-bg-hover) 50%, var(--card-bg) 70%);
   background-size: 220% 100%;
+  border: 1px solid var(--card-border);
   animation: mkt-shimmer 1.3s linear infinite;
 }
 @keyframes mkt-shimmer { from { background-position: 160% 0; } to { background-position: -60% 0; } }
@@ -486,7 +810,38 @@ html[data-theme="mono"] .mkt-btn.danger {
 .mkt-spin { animation: mkt-rot 1s linear infinite; }
 @keyframes mkt-rot { to { transform: rotate(360deg); } }
 
-/* ------------------------------------------------------------------ modal */
+/* ------------------------------------------------------------------ 提示条 */
+.mkt-note {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 8px 11px;
+  margin-bottom: 10px;
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--status-warn) 9%, transparent);
+  border: 1px solid color-mix(in srgb, var(--status-warn) 26%, transparent);
+  border-radius: 9px;
+}
+.mkt-note svg { width: 13px; height: 13px; flex-shrink: 0; margin-top: 2px; color: var(--status-warn); }
+.mkt-note b { color: var(--text-secondary); font-weight: 600; }
+.mkt-note code {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-secondary);
+  user-select: text;
+  -webkit-user-select: text;
+}
+.mkt-note.plain {
+  background: var(--surface-sunken);
+  border-color: var(--border-subtle);
+}
+.mkt-note.plain svg { color: var(--text-dim); }
+html[data-theme="mono"] .mkt-note { background: var(--surface-sunken); border-color: var(--border-subtle); }
+html[data-theme="mono"] .mkt-note svg { color: var(--text-dim); }
+
+/* ------------------------------------------------------------------ 弹窗 */
 .mkt-scrim {
   position: fixed;
   inset: 0;
@@ -496,52 +851,77 @@ html[data-theme="mono"] .mkt-btn.danger {
   justify-content: center;
   padding: 20px;
   background: rgba(0, 0, 0, .62);
-  backdrop-filter: blur(6px);
-  animation: mkt-fade .16s ease;
+  backdrop-filter: blur(5px);
+  animation: mkt-fade .15s ease;
 }
 @keyframes mkt-fade { from { opacity: 0; } to { opacity: 1; } }
 
 .mkt-modal {
-  width: min(640px, 100%);
+  width: min(660px, 100%);
   max-height: 100%;
   display: flex;
   flex-direction: column;
-  background: var(--surface-base);
+  background-color: var(--app-bg);
+  background-image: linear-gradient(180deg, var(--app-bg-top) 0%, var(--app-bg) 34%);
   border: 1px solid var(--border-medium);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 24px 60px #000000e6;
+  border-radius: 14px;
+  box-shadow: var(--shadow-pop);
   overflow: hidden;
+  animation: mkt-rise .18s cubic-bezier(.16, 1, .3, 1);
 }
+@keyframes mkt-rise { from { opacity: 0; transform: translateY(8px) scale(.99); } to { opacity: 1; transform: none; } }
+
 .mkt-modal-head {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
-  padding: 14px 16px;
+  gap: 11px;
+  padding: 15px 16px 13px;
   border-bottom: 1px solid var(--border-subtle);
-  background: var(--surface-card);
   flex-shrink: 0;
 }
-.mkt-modal-head .t { font-size: 14px; font-weight: 700; }
-.mkt-modal-head .s { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-dim); margin-top: 2px; user-select: text; -webkit-user-select: text; }
-.mkt-modal-body { padding: 14px 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
-.mkt-modal-body::-webkit-scrollbar { width: 6px; }
-.mkt-modal-body::-webkit-scrollbar-thumb { background: #ffffff29; border-radius: var(--radius-full); }
-
-.mkt-block { display: flex; flex-direction: column; gap: 7px; }
-.mkt-block > .h { font-size: 11px; font-weight: 700; color: var(--text-secondary); letter-spacing: .02em; }
-
-/* 一键安装失败时的备用路径。默认收起，避免主流程被两套说明挤满。 */
-.mkt-fallback { border-top: 1px dashed var(--border-subtle); padding-top: 9px; }
-.mkt-fallback > summary {
-  display: flex; align-items: center; gap: 6px;
-  font-size: 11px; color: var(--text-muted); cursor: pointer;
-  list-style: none; user-select: none;
+.mkt-modal-head .mkt-avatar { width: 36px; height: 36px; }
+.mkt-modal-head .t { font-size: 14.5px; font-weight: 700; line-height: 1.35; }
+.mkt-modal-head .s {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-dim);
+  margin-top: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  user-select: text;
+  -webkit-user-select: text;
 }
-.mkt-fallback > summary::-webkit-details-marker { display: none; }
-.mkt-fallback > summary:hover { color: var(--text-secondary); }
-.mkt-fallback > summary svg { width: 12px; height: 12px; flex-shrink: 0; }
-.mkt-fallback[open] > summary { color: var(--text-secondary); margin-bottom: 7px; }
+.mkt-modal-head .mkt-btn { flex-shrink: 0; }
 
+.mkt-modal-body {
+  padding: 14px 16px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+.mkt-modal-body::-webkit-scrollbar { width: 8px; }
+.mkt-modal-body::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, .16);
+  border-radius: var(--radius-full);
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+.mkt-block { display: flex; flex-direction: column; gap: 8px; }
+.mkt-block > .h {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .02em;
+  color: var(--text-muted);
+}
+.mkt-block > .h svg { color: var(--text-dim); }
+
+/* 步骤：数字徽章 + 说明，弹窗里只留必须的动作 */
 .mkt-steps { display: flex; flex-direction: column; gap: 9px; counter-reset: s; }
 .mkt-step { display: flex; gap: 9px; align-items: flex-start; }
 .mkt-step::before {
@@ -550,28 +930,39 @@ html[data-theme="mono"] .mkt-btn.danger {
   width: 18px; height: 18px; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
   font-size: 10px; font-weight: 700;
-  color: var(--text-primary);
+  color: var(--text-secondary);
   background: var(--surface-pill-hover);
   border: 1px solid var(--border-subtle);
   border-radius: 50%;
 }
-.mkt-step .tx { font-size: 11.5px; line-height: 1.55; color: var(--text-muted); padding-top: 1px; }
+.mkt-step .tx { font-size: 11.5px; line-height: 1.6; color: var(--text-muted); padding-top: 1px; }
 .mkt-step .tx b { color: var(--text-secondary); font-weight: 600; }
+.mkt-step code {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-secondary);
+  background: var(--surface-badge);
+  padding: 1px 5px;
+  border-radius: var(--radius-xs);
+  user-select: text;
+  -webkit-user-select: text;
+}
 
 .mkt-cmd {
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  padding: 9px 10px;
+  padding: 10px 11px;
   background: var(--surface-sunken);
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
+  border-radius: 8px;
 }
+.mkt-cmd svg { width: 13px; height: 13px; flex-shrink: 0; margin-top: 3px; color: var(--text-dim); }
 .mkt-cmd code {
   flex: 1;
   font-family: var(--font-mono);
   font-size: 10.5px;
-  line-height: 1.6;
+  line-height: 1.65;
   color: var(--text-secondary);
   word-break: break-all;
   white-space: pre-wrap;
@@ -585,113 +976,169 @@ html[data-theme="mono"] .mkt-btn.danger {
   gap: 8px;
   padding: 12px 16px;
   border-top: 1px solid var(--border-subtle);
-  background: var(--surface-card);
+  background: color-mix(in srgb, var(--app-bg-top) 60%, transparent);
   flex-shrink: 0;
 }
 .mkt-modal-foot .spacer { flex: 1; }
 
-.mkt-note {
-  display: flex;
-  gap: 7px;
-  padding: 9px 10px;
-  font-size: 10.5px;
-  line-height: 1.6;
-  color: var(--text-muted);
-  background: var(--status-warn-dim);
-  border: 1px solid color-mix(in srgb, var(--status-warn) 25%, transparent);
-  border-radius: var(--radius-sm);
+/* 备用路径：默认收起，别把主流程挤满 */
+.mkt-fallback { border-top: 1px dashed var(--border-subtle); padding-top: 10px; }
+.mkt-fallback > summary {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11px; color: var(--text-muted); cursor: pointer;
+  list-style: none; user-select: none;
 }
-.mkt-note svg { width: 12px; height: 12px; flex-shrink: 0; margin-top: 2px; color: var(--status-warn); }
-.mkt-note.plain { background: var(--surface-sunken); border-color: var(--border-subtle); }
-.mkt-note.plain svg { color: var(--text-dim); }
+.mkt-fallback > summary::-webkit-details-marker { display: none; }
+.mkt-fallback > summary:hover { color: var(--text-secondary); }
+.mkt-fallback > summary svg { width: 12px; height: 12px; flex-shrink: 0; }
+.mkt-fallback[open] > summary { color: var(--text-secondary); margin-bottom: 8px; }
 
-/* 安装弹窗里的可选开关（当前只有「走加速下载」一项）。
-   用 accent-color 跟主题走，不做自定义方块 —— 换主题时不必再调一遍。 */
 .mkt-check {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
+  gap: 9px;
+  padding: 8px 10px;
   font-size: 11.5px;
   line-height: 1.5;
   color: var(--text-muted);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
   cursor: pointer;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
 }
+.mkt-check:hover { border-color: var(--border-medium); color: var(--text-secondary); }
 .mkt-check input[type="checkbox"] {
   flex-shrink: 0;
-  width: 13px;
-  height: 13px;
-  margin: 1px 0 0;
+  width: 14px; height: 14px;
+  margin: 2px 0 0;
   accent-color: var(--accent);
   cursor: pointer;
 }
 .mkt-check span b { color: var(--text-secondary); font-weight: 600; }
 
-/* --------------------------------------------------------------- disclaimer */
+/* ------------------------------------------------------------------ 页脚 */
 .mkt-footer {
   flex-shrink: 0;
-  padding-top: 9px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px 11px;
   border-top: 1px solid var(--border-subtle);
   font-size: 10px;
-  line-height: 1.6;
+  line-height: 1.55;
   color: var(--text-dim);
+  background: color-mix(in srgb, var(--app-bg) 55%, transparent);
 }
 .mkt-footer b { color: var(--text-muted); font-weight: 600; }
+.mkt-footer svg { width: 12px; height: 12px; flex-shrink: 0; color: var(--status-warn); opacity: .8; }
+.mkt-footer .txt {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.mkt-footer .spacer { flex: 1; }
+.mkt-footer code {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--text-muted);
+  background: var(--surface-badge);
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  white-space: nowrap;
+}
 
-/* ----------------------------------------------------------------- pager */
-/* 翻页 + 滚动条两条路都留着：滚动条是连续浏览，翻页是「一段一段」看，
- * 长目录里后者更省事。两者独立，不互相依赖。 */
+/* ------------------------------------------------------------------ 翻页 */
+/* 滚动条与翻页并存：滚动是连续浏览，翻页是「一段一段」看，长目录里后者省事。 */
 .mkt-pager {
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding-top: 8px;
+  gap: 5px;
+  padding: 8px 16px;
   border-top: 1px solid var(--border-subtle);
   font-size: 11px;
   color: var(--text-muted);
 }
 .mkt-pager .spacer { flex: 1 1 auto; }
 .mkt-pager .pg {
-  min-width: 26px;
-  height: 24px;
-  padding: 0 7px;
+  min-width: 27px;
+  height: 26px;
+  padding: 0 8px;
   font: inherit;
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
   color: var(--text-muted);
   background: var(--surface-pill);
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
+  border-radius: 7px;
   cursor: pointer;
-  transition: all .15s ease;
+  transition: all var(--transition-fast);
 }
-.mkt-pager .pg:hover:not(:disabled) { color: var(--text-primary); background: var(--surface-pill-hover); }
+.mkt-pager .pg:hover:not(:disabled) { color: var(--text-primary); background: var(--surface-pill-hover); border-color: var(--border-medium); }
 .mkt-pager .pg.active {
+  color: #fff;
+  background: var(--grad-brand);
+  border-color: color-mix(in srgb, #7c7ff7 70%, transparent);
+  font-weight: 700;
+}
+html[data-theme="mono"] .mkt-pager .pg.active {
   color: var(--text-primary);
   background: var(--surface-card-active);
   border-color: var(--border-highlight);
-  font-weight: 700;
 }
-.mkt-pager .pg:disabled { opacity: .35; cursor: not-allowed; }
-.mkt-pager .pg-gap { padding: 0 4px; color: var(--text-dim); }
-.mkt-pager .pg-info { font-variant-numeric: tabular-nums; }
+.mkt-pager .pg:disabled { opacity: .3; cursor: not-allowed; }
+.mkt-pager .pg-gap { padding: 0 3px; color: var(--text-dim); font-size: 11px; }
+.mkt-pager .pg-info { font-variant-numeric: tabular-nums; font-size: 10.5px; color: var(--text-dim); }
 
+/* ------------------------------------------------------------------ toast */
 .mkt-toast {
   position: fixed;
   left: 50%;
-  bottom: 18px;
+  bottom: 20px;
   z-index: 90;
   transform: translateX(-50%);
-  padding: 8px 14px;
+  max-width: min(560px, 88vw);
+  padding: 9px 16px;
   font-size: 11.5px;
   font-weight: 600;
   color: var(--text-primary);
-  background: var(--surface-overlay);
+  background: color-mix(in srgb, var(--app-bg-top) 92%, transparent);
   border: 1px solid var(--border-medium);
   border-radius: var(--radius-full);
-  box-shadow: 0 10px 30px #000000a6;
-  animation: mkt-fade .16s ease;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, .55);
+  backdrop-filter: blur(10px);
+  animation: mkt-toast-in .18s cubic-bezier(.16, 1, .3, 1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.mkt-toast.err { color: #fee2e2; border-color: color-mix(in srgb, var(--status-error) 45%, transparent); }
+@keyframes mkt-toast-in { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+.mkt-toast.err {
+  color: #fee2e2;
+  border-color: color-mix(in srgb, var(--status-error) 45%, transparent);
+}
+html[data-theme="mono"] .mkt-toast.err { color: var(--text-primary); border-color: var(--border-highlight); }
+
+/* ------------------------------------------------------------- 窄屏收敛 */
+/* 宿主面板常被拖到 600–900px 宽：按钮只留图标，卡片单列，页脚不挤压正文。 */
+@media (max-width: 860px) {
+  .mkt-btn.labeled { width: 34px; padding: 0; }
+  .mkt-btn.labeled .lb { display: none; }
+  .mkt-grid { grid-template-columns: 1fr; }
+  .mkt-meta .opt { display: none; }
+}
+@media (max-width: 640px) {
+  .mkt-top { padding: 10px 12px 8px; }
+  .mkt-body { padding: 12px 12px 4px; }
+  .mkt-footer { padding: 8px 12px 10px; }
+  .mkt-pager { padding: 7px 12px; }
+  .mkt-pager .pg-info { display: none; }
+}
 
 </style>
 </head>
@@ -757,7 +1204,7 @@ const CONFIG = {
  * 所以这里只是「catalog.json 缺失」时的兜底，两处应保持一致。 */
 /* 由 build_market.py 内联的离线目录（来源：market/catalog.json，
    与在线目录同构；在线目录可达时会被覆盖）。 */
-const SEED = {"format":1,"generatedAt":"2026-10-31T06:58:15+00:00","topic":"openrevo-plugin","count":4,"plugins":[{"id":"battery-hardware-limit","name":"锁定充电上限","version":"1.0.0","author":"LIPiston","plugin_type":"slot","description":"激活底层 EC 平台门控以真实生效 60%/80% 硬件限电（实验功能）。","repo":"LIPiston/open-revo-market","subpath":"battery-hardware-limit","branch":"main","commit":null,"stars":null,"updatedAt":null,"license":null,"unreviewed":false,"capabilities":null,"topics":["openrevo-plugin"],"homepage":null,"entry":"index.html","target_slot":"power.hardware_limit","slot_height":"36px","min_host_version":"0.9.3","permissions":["power:control"],"service":null,"shortcuts":null,"watchers":null,"window":null,"telemetry":null,"theme_css":null,"background_css":null,"image":null},{"id":"eva01-core","name":"EVA-01 初号机 S2 能量核心","version":"1.0.0","author":"LIPiston","plugin_type":"widget","description":"异形拟态机甲桌宠挂件：结温脉冲呼吸、风扇转速联动，点一下核心切换全速强冷。","repo":"LIPiston/open-revo-market","subpath":"eva01-core","branch":"main","commit":null,"stars":null,"updatedAt":null,"license":null,"unreviewed":false,"capabilities":null,"topics":["openrevo-plugin"],"homepage":null,"entry":"index.html","target_slot":null,"slot_height":null,"min_host_version":"0.9.3","permissions":["telemetry:read","fan:control"],"service":null,"shortcuts":null,"watchers":null,"window":{"width":260,"height":180,"transparent":true,"always_on_top":true,"resizable":false,"skip_taskbar":true},"telemetry":{"enabled":true,"sensors":["cpu_temp","cpu_fan_rpm","power_mode","fan_boost"]},"theme_css":null,"background_css":null,"image":null},{"id":"plugin-market","name":"插件市场","version":"1.2.0","author":"LIPiston","plugin_type":"tab","description":"浏览 GitHub 上带 openrevo-plugin topic 的第三方插件，宿主支持时一键安装/卸载。","repo":"LIPiston/open-revo-market","subpath":"plugin-market","branch":"main","commit":"a311a5f7736002f22eeef2945130a1b1c3222ce6","stars":0,"updatedAt":"2026-10-31T00:45:38Z","license":null,"unreviewed":false,"capabilities":null,"topics":["openrevo-plugin"],"homepage":null,"entry":"index.html","target_slot":null,"slot_height":null,"min_host_version":null,"permissions":null,"service":null,"shortcuts":null,"watchers":null,"window":null,"telemetry":null,"theme_css":null,"background_css":null,"image":null},{"id":"openrevo-plugin-power","name":"自定义功耗插件","version":"0.5.3","author":"xmsjx","plugin_type":"tab","description":"OpenRevo 标签页：CPU 功耗墙（STAPM/慢速/快速 + 时间窗）、温度墙、AMD Curve Optimizer（全核/每核负压）、FMax；Intel 平台的 core/cache 偏移与倍频。只写勾选项、写后回读；需要 PawnIO 驱动与管理员代理。GPL-3.0。","repo":"xmsjx/openrevo-plugin-power","subpath":"","branch":"main","commit":"59cf94881e597187adff022d10483b5027a5b39b","stars":0,"updatedAt":"2026-10-30T05:04:58Z","license":"GPL-3.0","unreviewed":true,"capabilities":null,"topics":["cpu-tuning","openrevo","openrevo-plugin","power-limit"],"homepage":null}]};
+const SEED = {"format":1,"generatedAt":"2026-10-31T06:58:15+00:00","topic":"openrevo-plugin","count":2,"plugins":[{"id":"plugin-market","name":"插件市场","version":"1.2.0","author":"LIPiston","plugin_type":"tab","description":"浏览 GitHub 上带 openrevo-plugin topic 的第三方插件，宿主支持时一键安装/卸载。","repo":"LIPiston/open-revo-market","subpath":"plugin-market","branch":"main","commit":"a311a5f7736002f22eeef2945130a1b1c3222ce6","stars":0,"updatedAt":"2026-10-31T00:45:38Z","license":null,"unreviewed":false,"capabilities":null,"topics":["openrevo-plugin"],"homepage":null,"entry":"index.html","target_slot":null,"slot_height":null,"min_host_version":null,"permissions":null,"service":null,"shortcuts":null,"watchers":null,"window":null,"telemetry":null,"theme_css":null,"background_css":null,"image":null},{"id":"openrevo-plugin-power","name":"自定义功耗插件","version":"0.5.3","author":"xmsjx","plugin_type":"tab","description":"OpenRevo 标签页：CPU 功耗墙（STAPM/慢速/快速 + 时间窗）、温度墙、AMD Curve Optimizer（全核/每核负压）、FMax；Intel 平台的 core/cache 偏移与倍频。只写勾选项、写后回读；需要 PawnIO 驱动与管理员代理。GPL-3.0。","repo":"xmsjx/openrevo-plugin-power","subpath":"","branch":"main","commit":"59cf94881e597187adff022d10483b5027a5b39b","stars":0,"updatedAt":"2026-10-30T05:04:58Z","license":"GPL-3.0","unreviewed":true,"capabilities":null,"topics":["cpu-tuning","openrevo","openrevo-plugin","power-limit"],"homepage":null}]};
 
 const TYPE_LABEL = {
   skin: '主窗皮肤', background: '背景壁纸', tab: '面板插槽',
@@ -794,6 +1241,31 @@ const I = {
   shield: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l7 3v6c0 4.4-3 7.8-7 9-4-1.2-7-4.6-7-9V6z"/></svg>',
   x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
   tag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8.5" r="1.4"/></svg>',
+  chev: '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>',
+  play: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4.5v15l13-7.5z"/></svg>',
+  stop: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>',
+  power: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v9"/><path d="M6.5 6.5a8 8 0 1 0 11 0"/></svg>',
+  slash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="m6 18 12-12"/></svg>',
+  panel: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/><path d="M9 9v11"/></svg>',
+  brush: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 20c3 1 5-1 5-4 0-2 1-3 3-3l7-7a2 2 0 0 0-3-3l-7 7c0 2-1 3-3 3-2 0-3 2-2 7z"/></svg>',
+  image: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="m4 18 5-5 4 4 3-3 4 4"/></svg>',
+  widget: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="5" rx="2"/><rect x="13" y="10" width="8" height="11" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/></svg>',
+  slot: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="2.5" y="9" width="19" height="6" rx="2" stroke-dasharray="3 2.5"/></svg>',
+  server: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/></svg>',
+  shell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="19" height="16" rx="2"/><path d="m7 10 3 2-3 2"/><path d="M12.5 14h4"/></svg>',
+  chip: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2.5v3M15 2.5v3M9 18.5v3M15 18.5v3M2.5 9h3M2.5 15h3M18.5 9h3M18.5 15h3"/></svg>',
+  grid: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>',
+};
+
+/** 形态 → 图标。只为「一眼分得清类型」，不据此推断运行期行为。 */
+const TYPE_ICON = {
+  skin: 'brush', background: 'image', tab: 'panel', widget: 'widget',
+  slot: 'slot', service: 'server', shell: 'shell', driver: 'chip',
+};
+/** 形态 → 色相（与 CSS 里的 .mkt-badge.type-* 保持同一组值）。 */
+const TYPE_HUE = {
+  skin: 235, background: 38, tab: 200, widget: 160,
+  slot: 265, service: 350, shell: 172, driver: 24,
 };
 
 /* ------------------------------------------------------------------- state */
@@ -1624,6 +2096,44 @@ function disclosureBlock(entry) {
   return `<div class="mkt-disc">${items}</div>`;
 }
 
+/** 卡片上一眼可见的能力结论。安全信息不折叠：
+ *  三态（扫过检出 / 扫过未检出 / 没扫过）用一句话说完，细节留给弹窗。
+ *  「没扫过」用安静的纯文字行 —— 它不是一个发现，不该用告警框抢注意力。 */
+function capabilitySummary(entry) {
+  const caps = entry.capabilities;
+  if (caps === undefined || caps === null || entry.live) {
+    // 三态之一：没扫过。不能渲染成「未检出」。
+    return `<div class="mkt-cap quiet" title="该条目尚未做静态能力扫描，清单声明不代表实际行为">${I.info}<span><b>未扫描</b> · 清单不代表实际行为</span></div>`;
+  }
+  if (caps.length === 0) {
+    return `<div class="mkt-cap ok">${I.shield}<span><b>未检出</b> · 静态扫描未发现联网、文件写入等能力</span></div>`;
+  }
+  const list = caps.map((c) => CAP_LABEL[c] || c).join('、');
+  return `<div class="mkt-cap warn">${I.alert}<span>静态扫描检出：<b>${esc(list)}</b></span></div>`;
+}
+
+/** 危险组合只列命中的，逐条用扫描器的话写，不给总分、不做安全评分。 */
+function riskLines(entry) {
+  const caps = entry.capabilities;
+  if (!Array.isArray(caps)) return '';
+  return CAP_RISK
+    .filter((r) => r.need.every((n) => caps.includes(n)))
+    .map((r) => `<div class="mkt-risk">${I.alert}<span>${esc(r.text)}</span></div>`)
+    .join('');
+}
+
+/** 清单自述字段：卡片上收进 <details>，避免每张卡都铺满样板字。
+ *  verify 断言的是 DOM 文本，收起来不影响可取到。 */
+function manifestDisclosureDetails(entry) {
+  const rows = manifestDisclosure(entry);
+  if (!rows.length) return '';
+  return `
+    <details class="mkt-more">
+      <summary>${I.info}清单声明<span class="mkt-badge">${rows.length}</span>${I.chev}</summary>
+      <div class="mkt-more-body">${disclosureBlock(entry)}</div>
+    </details>`;
+}
+
 function capabilityBlock(entry) {
   const caps = entry.capabilities;
   let items;
@@ -1698,9 +2208,9 @@ function lifecycleBlock(entry) {
   let html = `
     <div class="mkt-lifecycle">
       <button class="mkt-btn sm" data-act="enable" data-id="${id}" ${dis}
-        title="让宿主重新加载该插件">${I.check}启用</button>
+        title="让宿主重新加载该插件">${I.power}启用</button>
       <button class="mkt-btn sm" data-act="disable" data-id="${id}" ${dis}
-        title="停用后插件不再被加载，文件保留">${I.x}停用</button>`;
+        title="停用后插件不再被加载，文件保留">${I.slash}停用</button>`;
 
   if (entry.service) {
     const can = canManageService();
@@ -1713,9 +2223,9 @@ function lifecycleBlock(entry) {
         <span class="dot${can ? '' : ' err'}"></span>
         <span data-svc-status="${id}" title="${capTitle}">${esc(serviceStatusText(entry))}</span>
         <button class="mkt-btn sm" data-act="service-start" data-id="${id}" ${sdis}
-          title="${capTitle || '启动伴随服务'}">启动服务</button>
+          title="${capTitle || '启动伴随服务'}">${I.play}启动</button>
         <button class="mkt-btn sm" data-act="service-stop" data-id="${id}" ${sdis}
-          title="${capTitle || '停止伴随服务'}">停止服务</button>
+          title="${capTitle || '停止伴随服务'}">${I.stop}停止</button>
       </span>`;
   }
 
@@ -1728,11 +2238,13 @@ function card(entry) {
   const upd = hasUpdate(entry);
   const tname = TYPE_LABEL[entry.plugin_type] || entry.plugin_type;
   const rel = relTime(entry.updatedAt);
+  const hue = TYPE_HUE[entry.plugin_type] || 220;
+  const icon = I[TYPE_ICON[entry.plugin_type]] || I.box;
   const stars = entry.stars === null || entry.stars === undefined
-    ? '' : `<span class="mkt-card-stat">${I.star}${entry.stars}</span>`;
+    ? '' : `<span class="mkt-card-stat" title="${entry.stars} stars">${I.star}${entry.stars}</span>`;
 
   const badges = [
-    badge(`type-${entry.plugin_type}`, tname, I.tag),
+    badge(`type-${entry.plugin_type}`, tname, icon),
     entry.version ? badge('', 'v' + entry.version) : '',
     isInst ? badge('ok', '已安装', I.check) : '',
     upd ? badge('warn', '可更新', I.refresh) : '',
@@ -1757,16 +2269,17 @@ function card(entry) {
   return `
     <div class="mkt-card${isInst ? ' installed' : ''}${isBusy ? ' busy' : ''}" data-id="${esc(entry.id)}">
       <div class="mkt-card-head">
-        <div class="mkt-avatar" style="display:flex;align-items:center;justify-content:center;color:var(--text-dim)">${I.box}</div>
+        <div class="mkt-avatar" style="--h:${hue}">${icon}</div>
         <div class="mkt-card-titles">
           <div class="mkt-card-name">${esc(entry.name)}</div>
-          <div class="mkt-card-id">${esc(entry.repo || entry.id)}${entry.subpath ? '/' + esc(entry.subpath) : ''}</div>
+          <div class="mkt-card-id" title="${esc(entry.repo || entry.id)}">${esc(entry.repo || entry.id)}${entry.subpath ? '/' + esc(entry.subpath) : ''}</div>
         </div>
       </div>
       <div class="mkt-badges">${badgeHtml}</div>
       ${desc}
-      ${disclosureBlock(entry)}
-      ${capabilityBlock(entry)}
+      ${capabilitySummary(entry)}
+      ${riskLines(entry)}
+      ${manifestDisclosureDetails(entry)}
       ${isInst ? lifecycleBlock(entry) : ''}
       <div class="mkt-card-foot">
         ${stars}
@@ -1788,6 +2301,7 @@ function toolbar() {
   const counts = typeCounts();
   const filters = [
     ['all', '全部', counts.all],
+    ['__installed__', '已安装', counts.__installed__],
     ['skin', TYPE_LABEL.skin, counts.skin || 0],
     ['background', TYPE_LABEL.background, counts.background || 0],
     ['tab', TYPE_LABEL.tab, counts.tab || 0],
@@ -1796,23 +2310,29 @@ function toolbar() {
     ['service', TYPE_LABEL.service, counts.service || 0],
     ['shell', TYPE_LABEL.shell, counts.shell || 0],
     ['driver', TYPE_LABEL.driver, counts.driver || 0],
-    ['__installed__', '已安装', counts.__installed__],
     ['__unreviewed__', '未审核', counts.__unreviewed__],
   ].filter((f) => f[0] === 'all' || f[0] === '__installed__' || f[0] === '__unreviewed__' || f[2] > 0);
 
   return `
-    <div class="mkt-bar">
-      <div class="mkt-search">${I.search}
-        <input id="q" type="search" placeholder="搜索插件名称、作者、仓库或描述…" value="${esc(state.query)}" spellcheck="false" />
+    <div class="mkt-top">
+      <div class="mkt-bar">
+        <div class="mkt-search">${I.search}
+          <input id="q" type="search" placeholder="搜索插件、作者、仓库或描述…" value="${esc(state.query)}" spellcheck="false" />
+        </div>
+        <div class="mkt-actions">
+          <button class="mkt-btn icon" data-act="refresh" title="重新获取目录" aria-label="刷新">${I.refresh}</button>
+          <button class="mkt-btn labeled" data-act="open-dir" title="在资源管理器中打开插件目录">${I.folder}<span class="lb">插件目录</span></button>
+          <button class="mkt-btn labeled" data-act="live" title="直接查询 GitHub topic，发现尚未被收录的新插件">${I.tag}<span class="lb">实时发现</span></button>
+        </div>
       </div>
-      <button class="mkt-btn" data-act="refresh" title="重新获取目录">${I.refresh}刷新</button>
-      <button class="mkt-btn" data-act="open-dir" title="在资源管理器中打开插件目录">${I.folder}插件目录</button>
-      <button class="mkt-btn" data-act="live" title="直接查询 GitHub topic，发现尚未被收录的新插件">${I.tag}实时发现</button>
-    </div>
-    <div class="mkt-sources">
-      ${filters.map(([k, label, n]) =>
-        `<button class="mkt-src${state.typeFilter === k ? ' active' : ''}" data-filter="${k}">${esc(label)}<span class="n">${n}</span></button>`
-      ).join('')}
+      <div class="mkt-filterbar">
+        <div class="mkt-sources">
+          ${filters.map(([k, label, n]) =>
+            `<button class="mkt-src${state.typeFilter === k ? ' active' : ''}" data-filter="${k}">${esc(label)}<span class="n">${n}</span></button>`
+          ).join('')}
+        </div>
+      </div>
+      ${metaLine()}
     </div>`;
 }
 
@@ -1844,10 +2364,8 @@ function metaLine() {
   return `
     <div class="mkt-meta">
       <span class="dot ${dot}"></span>
-      <span>${esc(note)}</span>
-      ${gen ? `<span>· 目录更新于 ${esc(gen)}</span>` : ''}
-      <span>· ${esc(bridge)}</span>
-      <span>· ${esc(capsLine)}</span>
+      <span class="txt" title="${esc(note + (gen ? ' · 目录更新于 ' + gen : ''))}">${esc(note)}${gen ? ` · 更新于 ${esc(gen)}` : ''}</span>
+      <span class="txt opt" title="${esc(bridge + ' · ' + capsLine)}">· ${esc(bridge)} · ${esc(capsLine)}</span>
       <span class="spacer"></span>
       <code>topic:${esc(CONFIG.topic)}</code>
     </div>`;
@@ -1903,7 +2421,7 @@ function render() {
         <div class="mkt-grid">${groups.reviewed.map(card).join('')}</div>`;
     }
     if (groups.unreviewed && groups.unreviewed.length) {
-      body += `<div class="mkt-section-title">未审核（topic 自动收录）· ${groups.unreviewed.length}</div>
+      body += `<div class="mkt-section-title unreviewed">未审核 · topic 自动收录 · ${groups.unreviewed.length}</div>
         <div class="mkt-grid">${groups.unreviewed.map(card).join('')}</div>`;
     }
   }
@@ -1911,12 +2429,14 @@ function render() {
   $('#app').innerHTML = `
     <div class="mkt">
       ${toolbar()}
-      ${metaLine()}
       <div class="mkt-body">${liveBanner()}${body}</div>
       ${pager(pages, page, all.length)}
       <div class="mkt-footer">
-        <b>插件是第三方代码，以你的权限运行。</b>本市场只做来源绑定与静态披露，不构成安全审计。
-        安装即把代码写入插件目录，卸载即删除对应文件夹 —— 请只安装你信任的来源。
+        <span class="txt" title="本市场只做来源绑定与静态披露，不构成安全审计。">
+          ${I.alert}<b>插件是第三方代码，以你的权限运行。</b>本市场只做来源绑定与静态披露，不构成安全审计。
+        </span>
+        <span class="spacer"></span>
+        <code>卸载 = 移入回收站</code>
       </div>
     </div>`;
 
@@ -2029,12 +2549,12 @@ function openUninstallModal(entry) {
   scrim.innerHTML = `
     <div class="mkt-modal" role="dialog" aria-label="卸载插件">
       <div class="mkt-modal-head">
-        <div class="mkt-avatar" style="display:flex;align-items:center;justify-content:center;color:var(--text-dim)">${I.box}</div>
+        <div class="mkt-avatar" style="--h:350">${I.box}</div>
         <div style="flex:1;min-width:0">
           <div class="t">卸载「${esc(entry.name && entry.name !== entry.id ? entry.name : entry.id)}」</div>
-          <div class="s">${esc(entry.id)}</div>
+          <div class="s" title="${esc(entry.id)}">${esc(entry.id)}</div>
         </div>
-        <button class="mkt-btn sm" data-close="1" title="关闭">${I.x}</button>
+        <button class="mkt-btn icon" data-close="1" title="关闭" aria-label="关闭">${I.x}</button>
       </div>
       <div class="mkt-modal-body">
         <div class="mkt-note">
@@ -2098,22 +2618,25 @@ function openInstallModal(entry) {
   const branch = entry.branch || 'main';
   const oneClick = canOneClick();
 
+  const hue = TYPE_HUE[entry.plugin_type] || 220;
+  const icon = I[TYPE_ICON[entry.plugin_type]] || I.box;
+
   const scrim = document.createElement('div');
   scrim.className = 'mkt-scrim';
   scrim.innerHTML = `
     <div class="mkt-modal" role="dialog" aria-label="安装插件">
       <div class="mkt-modal-head">
-        <div class="mkt-avatar" style="display:flex;align-items:center;justify-content:center;color:var(--text-dim)">${I.box}</div>
+        <div class="mkt-avatar" style="--h:${hue}">${icon}</div>
         <div style="flex:1;min-width:0">
           <div class="t">${isInst ? '重新安装' : '安装'}「${esc(entry.name)}」</div>
-          <div class="s">${esc(entry.repo)}${entry.subpath ? ' / ' + esc(entry.subpath) : ''} @ ${esc(branch)}</div>
+          <div class="s" title="${esc(entry.repo)}${entry.subpath ? ' / ' + esc(entry.subpath) : ''} @ ${esc(branch)}">${esc(entry.repo)}${entry.subpath ? ' / ' + esc(entry.subpath) : ''} @ ${esc(branch)}</div>
         </div>
-        <button class="mkt-btn sm" data-close="1" title="关闭">${I.x}</button>
+        <button class="mkt-btn icon" data-close="1" title="关闭" aria-label="关闭">${I.x}</button>
       </div>
 
       <div class="mkt-modal-body">
         <div class="mkt-badges">
-          ${badge(`type-${entry.plugin_type}`, tname, I.tag)}
+          ${badge(`type-${entry.plugin_type}`, tname, icon)}
           ${entry.version ? badge('', 'v' + entry.version) : ''}
           ${entry.license ? badge('', entry.license) : ''}
           ${entry.commit ? badge('info', 'commit ' + entry.commit.slice(0, 10)) : badge('', branch)}
@@ -2122,74 +2645,53 @@ function openInstallModal(entry) {
           ${compatBadge(entry)}
         </div>
 
+        <div class="mkt-block">
+          <div class="h">${I.shield}能力披露</div>
+          ${capabilityBlock(entry)}
+          ${riskLines(entry)}
+        </div>
+
         ${manifestDisclosure(entry).length ? `
         <div class="mkt-block">
-          <div class="h">清单声明</div>
+          <div class="h">${I.info}清单声明</div>
           ${disclosureBlock(entry)}
         </div>` : ''}
 
         ${oneClick ? `
-        <div class="mkt-note plain">
-          ${I.shield}
-          <span>宿主会自己完成下载与落盘：<b>强制 HTTPS</b>、解压时校验路径边界（防 Zip Slip）、
-          安装目录限制在 OpenRevo 的 AppData 下，装完自动重扫。
-          插件是第三方代码，会以你的权限运行 —— 请只安装你信任的来源。</span>
-        </div>
         <div class="mkt-block">
-          <div class="h">安全提示</div>
-          <div class="mkt-steps">
-            <div class="mkt-step"><div class="tx">本操作会把 <code>${esc(entry.repo)}</code>${
-              entry.subpath ? ` 的 <code>${esc(entry.subpath)}</code> 子目录` : ' 的仓库根'
-            }写入 <code>%APPDATA%\\OpenRevo\\plugins\\${esc(entry.id)}\\</code>，同名目录会被覆盖。</div></div>
-            <div class="mkt-step"><div class="tx">${entry.sha256
-              ? '目录里提供了 <b>sha256</b>，宿主会在安装前校验归档指纹 —— 内容被替换会被拒绝。'
-              : '目录条目<b>没有提供 sha256</b>，宿主只能校验传输完整性，不能证明内容未被篡改。'}</div></div>
-          </div>
-        </div>
-        <div class="mkt-block">
-          <div class="h">下载链路</div>
+          <div class="h">${I.down}下载链路</div>
           <label class="mkt-check">
             <input type="checkbox" data-opt="proxy" ${state.useProxy ? 'checked' : ''}>
             <span>走 <b>gh-proxy.com</b> 加速（国内直连 codeload 常常超时）</span>
           </label>
-          <div class="mkt-note plain" style="margin-top:8px">
+          <div class="mkt-note plain">
             ${I.info}
             <span>加速只改下载地址，不改校验与落盘：宿主仍会强制 HTTPS、校验 sha256、按 subpath 定位插件。
-            实测加速后的归档仍保留 <code>${esc(archiveRoot(entry))}/</code> 根目录，因此 <code>subpath</code> 不变。<br/>
-            但<b>宿主会不会接受非 github.com 的下载域名尚未实测</b>—— 若开启后报安全策略错误，
-            关掉这个开关用直连重试。</span>
-          </div>
-        </div>` : `
-        <div class="mkt-note">
-          ${I.alert}
-          <span><b>本版宿主没有开放安装接口</b>（<code>get_plugin_host_capabilities</code> 不可用或 <code>can_install=false</code>），
-          因此市场不能替你完成下载。下面的命令是市场能给出的最短路径：复制它、在终端粘一次即可。</span>
-        </div>
-
-        <div class="mkt-block">
-          <div class="h">安装步骤</div>
-          <div class="mkt-steps">
-            <div class="mkt-step"><div class="tx">点下面的 <b>复制安装命令</b>。<br/>
-              它会把 <code>${esc(entry.repo)}</code> 的 ${entry.subpath ? `子目录 <code>${esc(entry.subpath)}</code>` : '仓库内容'}
-              放到 <code>%APPDATA%\\OpenRevo\\plugins\\${esc(entry.id)}\\</code>。</div></div>
-            <div class="mkt-step"><div class="tx">在 <b>PowerShell</b> 里粘贴并回车（需要本机已装 <code>git</code>）。</div></div>
-            <div class="mkt-step"><div class="tx">回到宿主侧边栏的 <b>插件</b> 页，点右上角 <b>刷新</b>。
-              ${entry.plugin_type === 'skin' ? '皮肤还需在卡片上拨一次开关才会启用。' : '装好后即出现在列表里。'}</div></div>
-            <div class="mkt-step"><div class="tx">想卸载：删掉 <code>plugins\\${esc(entry.id)}</code> 文件夹，再回插件页刷新。</div></div>
+            加速后的归档仍保留 <code>${esc(archiveRoot(entry))}/</code> 根目录，因此 <code>subpath</code> 不变。
+            <b>宿主是否接受非 github.com 的下载域名尚未实测</b> —— 若开启后报安全策略错误，关掉开关用直连重试。</span>
           </div>
         </div>
 
-        <div class="mkt-block">
-          <div class="h">安装命令（PowerShell）</div>
-          <div class="mkt-cmd">${I.copy}<code id="cmd">${esc(cmd)}</code></div>
-        </div>`}
+        <details class="mkt-more">
+          <summary>${I.info}安装会把文件写到哪、校验到什么程度${I.chev}</summary>
+          <div class="mkt-more-body">
+            <div class="mkt-note plain">
+              ${I.shield}
+              <span>宿主自己完成下载与落盘：<b>强制 HTTPS</b>、解压时校验路径边界（防 Zip Slip）、
+              安装目录限制在 OpenRevo 的 AppData 下，装完自动重扫。</span>
+            </div>
+            <div class="mkt-steps">
+              <div class="mkt-step"><div class="tx">本操作会把 <code>${esc(entry.repo)}</code>${
+                entry.subpath ? ` 的 <code>${esc(entry.subpath)}</code> 子目录` : ' 的仓库根'
+              }写入 <code>%APPDATA%\\OpenRevo\\plugins\\${esc(entry.id)}\\</code>，同名目录会被覆盖。</div></div>
+              <div class="mkt-step"><div class="tx">${entry.sha256
+                ? '目录里提供了 <b>sha256</b>，宿主会在安装前校验归档指纹 —— 内容被替换会被拒绝。'
+                : '目录条目<b>没有提供 sha256</b>，宿主只能校验传输完整性，不能证明内容未被篡改。'}</div></div>
+              <div class="mkt-step"><div class="tx">插件是第三方代码，会以你的权限运行 —— 请只安装你信任的来源。</div></div>
+            </div>
+          </div>
+        </details>
 
-        <div class="mkt-block">
-          <div class="h">能力披露</div>
-          ${capabilityBlock(entry)}
-        </div>
-
-        ${oneClick ? `
         <details class="mkt-fallback">
           <summary>${I.info}一键安装失败？手动安装（备用）</summary>
           <div class="mkt-block">
@@ -2204,8 +2706,27 @@ function openInstallModal(entry) {
             <br/>该地址直连不通时，可在前面加 <code>https://gh-proxy.com/</code> 走加速。</span>
           </div>
         </details>` : `
+        <div class="mkt-note">
+          ${I.alert}
+          <span><b>本版宿主没有开放安装接口</b>（<code>get_plugin_host_capabilities</code> 不可用或 <code>can_install=false</code>），
+          因此市场不能替你完成下载。下面的命令是市场能给出的最短路径：复制它、在终端粘一次即可。</span>
+        </div>
+
         <div class="mkt-block">
-          <div class="h">安装命令（PowerShell）</div>
+          <div class="h">${I.down}安装步骤</div>
+          <div class="mkt-steps">
+            <div class="mkt-step"><div class="tx">点下面的 <b>复制安装命令</b>。<br/>
+              它会把 <code>${esc(entry.repo)}</code> 的 ${entry.subpath ? `子目录 <code>${esc(entry.subpath)}</code>` : '仓库内容'}
+              放到 <code>%APPDATA%\\OpenRevo\\plugins\\${esc(entry.id)}\\</code>。</div></div>
+            <div class="mkt-step"><div class="tx">在 <b>PowerShell</b> 里粘贴并回车（需要本机已装 <code>git</code>）。</div></div>
+            <div class="mkt-step"><div class="tx">回到宿主侧边栏的 <b>插件</b> 页，点右上角 <b>刷新</b>。
+              ${entry.plugin_type === 'skin' ? '皮肤还需在卡片上拨一次开关才会启用。' : '装好后即出现在列表里。'}</div></div>
+            <div class="mkt-step"><div class="tx">想卸载：删掉 <code>plugins\\${esc(entry.id)}</code> 文件夹，再回插件页刷新。</div></div>
+          </div>
+        </div>
+
+        <div class="mkt-block">
+          <div class="h">${I.copy}安装命令（PowerShell）</div>
           <div class="mkt-cmd">${I.copy}<code id="cmd">${esc(cmd)}</code></div>
         </div>
 
@@ -2221,10 +2742,10 @@ function openInstallModal(entry) {
 
       <div class="mkt-modal-foot">
         <button class="mkt-btn" data-close="1">关闭</button>
-        <button class="mkt-btn" data-act2="open-repo">${I.tag}打开源码</button>
-        <button class="mkt-btn" data-act2="copy-cmd">${I.copy}复制命令</button>
+        <button class="mkt-btn labeled" data-act2="open-repo">${I.tag}<span class="lb">打开源码</span></button>
+        <button class="mkt-btn labeled" data-act2="copy-cmd">${I.copy}<span class="lb">复制命令</span></button>
         <span class="spacer"></span>
-        <button class="mkt-btn" data-act2="open-dir">${I.folder}打开插件目录</button>
+        <button class="mkt-btn labeled" data-act2="open-dir">${I.folder}<span class="lb">打开插件目录</span></button>
         ${oneClick
           ? `<button class="mkt-btn primary" data-act2="install-now">${I.down}${isInst ? '重新安装' : '立即安装'}</button>`
           : ''}

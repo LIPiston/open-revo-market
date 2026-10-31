@@ -158,7 +158,8 @@ python -m http.server 8791
 | `?theme=cyber\|mono\|light` | 模拟宿主主题 |
 | `?host=new\|old` | 模拟能力齐全的宿主，或缺少安装 IPC 的宿主 |
 | `?catalog=local` | 把在线目录 URL 改写成本地 `market/catalog.json` |
-| `?modal=1` | 自动打开安装弹窗供出图 |
+| `?modal=1` | 自动打开安装弹窗并**停在那里**供出图（不跑演练，演练会把弹窗关掉） |
+| `?delay=<ms>` | 配合 `?modal=1`：延迟多久打开弹窗，默认 2600 |
 | `?nodiag=1` | 隐藏诊断浮层，供人眼检查版式 |
 
 ## 10. 验收闸

@@ -30,3 +30,6 @@ shoot() { # name theme extraquery w h
 shoot market-clean-cyber cyber  "" 1180 880
 shoot market-clean-mono  mono   "" 1180 880
 shoot market-modal-cyber cyber  "&modal=1" 1180 880
+# 窄屏：宿主面板被拖窄时（约 660 / 900px）不能出现溢出或双列挤压
+shoot market-narrow-cyber cyber "" 700 820
+shoot market-narrow-mono  mono  "" 940 820
