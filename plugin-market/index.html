@@ -697,6 +697,9 @@ html[data-theme="mono"] .mkt-btn.danger {
 </head>
 <body>
 <div id="app"></div>
+<!-- toast 必须挂在 #app 之外：render() 整块重写 #app.innerHTML，
+     放在里面会被重建掉 —— 调用方 toast() 之后紧接 render() 时消息当场消失。 -->
+<div id="toast" class="mkt-toast" hidden></div>
 <script>
 /* ============================================================================
  * OpenRevo 插件市场 · 应用逻辑
@@ -754,7 +757,7 @@ const CONFIG = {
  * 所以这里只是「catalog.json 缺失」时的兜底，两处应保持一致。 */
 /* 由 build_market.py 内联的离线目录（来源：market/catalog.json，
    与在线目录同构；在线目录可达时会被覆盖）。 */
-const SEED = {"format":1,"generatedAt":"2026-10-22T07:31:42+00:00","topic":"openrevo-plugin","count":4,"plugins":[{"id":"battery-hardware-limit","name":"锁定充电上限","version":"1.0.0","author":"LIPiston","plugin_type":"slot","description":"激活底层 EC 平台门控以真实生效 60%/80% 硬件限电（实验功能）。","repo":"LIPiston/open-revo-market","subpath":"battery-hardware-limit","branch":"main","commit":null,"stars":null,"updatedAt":null,"license":null,"unreviewed":false,"capabilities":null,"topics":["openrevo-plugin"],"homepage":null,"entry":"index.html","target_slot":"power.hardware_limit","slot_height":"36px","min_host_version":"0.9.3","permissions":["power:control"],"service":null,"shortcuts":null,"watchers":null,"window":null,"telemetry":null,"theme_css":null,"background_css":null,"image":null},{"id":"eva01-core","name":"EVA-01 初号机 S2 能量核心","version":"1.0.0","author":"LIPiston","plugin_type":"widget","description":"异形拟态机甲桌宠挂件：结温脉冲呼吸、风扇转速联动，点一下核心切换全速强冷。","repo":"LIPiston/open-revo-market","subpath":"eva01-core","branch":"main","commit":null,"stars":null,"updatedAt":null,"license":null,"unreviewed":false,"capabilities":null,"topics":["openrevo-plugin"],"homepage":null,"entry":"index.html","target_slot":null,"slot_height":null,"min_host_version":"0.9.3","permissions":["telemetry:read","fan:control"],"service":null,"shortcuts":null,"watchers":null,"window":{"width":260,"height":180,"transparent":true,"always_on_top":true,"resizable":false,"skip_taskbar":true},"telemetry":{"enabled":true,"sensors":["cpu_temp","cpu_fan_rpm","power_mode","fan_boost"]},"theme_css":null,"background_css":null,"image":null},{"id":"plugin-market","name":"插件市场","version":"1.1.0","author":"LIPiston","plugin_type":"tab","description":"浏览 GitHub 上带 openrevo-plugin topic 的第三方插件，宿主支持时一键安装/卸载。","repo":"LIPiston/open-revo-market","subpath":"plugin-market","branch":"main","commit":"5fdc22c3480f924a7fdeea1da26a16b1b1ce9542","stars":0,"updatedAt":"2026-10-22T01:29:18Z","license":null,"unreviewed":false,"capabilities":null,"topics":["openrevo-plugin"],"homepage":null,"entry":"index.html","target_slot":null,"slot_height":null,"min_host_version":null,"permissions":null,"service":null,"shortcuts":null,"watchers":null,"window":null,"telemetry":null,"theme_css":null,"background_css":null,"image":null},{"id":"openrevo-plugin-power","name":"自定义功耗插件","version":"0.1.0","author":"xmsjx","plugin_type":"tab","description":"OpenRevo 标签页：CPU 功耗墙（STAPM/慢速/快速 + 时间窗）、温度墙、AMD Curve Optimizer（全核/每核负压）、FMax；Intel 平台的 core/cache 偏移与倍频。只写勾选项、写后回读；需要 PawnIO 驱动与管理员代理。GPL-3.0。","repo":"xmsjx/openrevo-plugin-power","subpath":"","branch":"main","commit":"8e955573a3838dc0a4368a420ea647246e408c70","stars":0,"updatedAt":"2026-10-20T07:47:58Z","license":"GPL-3.0","unreviewed":true,"capabilities":null,"topics":["cpu-tuning","openrevo","openrevo-plugin","power-limit"],"homepage":null}]};
+const SEED = {"format":1,"generatedAt":"2026-10-22T07:31:42+00:00","topic":"openrevo-plugin","count":4,"plugins":[{"id":"battery-hardware-limit","name":"锁定充电上限","version":"1.0.0","author":"LIPiston","plugin_type":"slot","description":"激活底层 EC 平台门控以真实生效 60%/80% 硬件限电（实验功能）。","repo":"LIPiston/open-revo-market","subpath":"battery-hardware-limit","branch":"main","commit":null,"stars":null,"updatedAt":null,"license":null,"unreviewed":false,"capabilities":null,"topics":["openrevo-plugin"],"homepage":null,"entry":"index.html","target_slot":"power.hardware_limit","slot_height":"36px","min_host_version":"0.9.3","permissions":["power:control"],"service":null,"shortcuts":null,"watchers":null,"window":null,"telemetry":null,"theme_css":null,"background_css":null,"image":null},{"id":"eva01-core","name":"EVA-01 初号机 S2 能量核心","version":"1.0.0","author":"LIPiston","plugin_type":"widget","description":"异形拟态机甲桌宠挂件：结温脉冲呼吸、风扇转速联动，点一下核心切换全速强冷。","repo":"LIPiston/open-revo-market","subpath":"eva01-core","branch":"main","commit":null,"stars":null,"updatedAt":null,"license":null,"unreviewed":false,"capabilities":null,"topics":["openrevo-plugin"],"homepage":null,"entry":"index.html","target_slot":null,"slot_height":null,"min_host_version":"0.9.3","permissions":["telemetry:read","fan:control"],"service":null,"shortcuts":null,"watchers":null,"window":{"width":260,"height":180,"transparent":true,"always_on_top":true,"resizable":false,"skip_taskbar":true},"telemetry":{"enabled":true,"sensors":["cpu_temp","cpu_fan_rpm","power_mode","fan_boost"]},"theme_css":null,"background_css":null,"image":null},{"id":"plugin-market","name":"插件市场","version":"1.2.0","author":"LIPiston","plugin_type":"tab","description":"浏览 GitHub 上带 openrevo-plugin topic 的第三方插件，宿主支持时一键安装/卸载。","repo":"LIPiston/open-revo-market","subpath":"plugin-market","branch":"main","commit":"5fdc22c3480f924a7fdeea1da26a16b1b1ce9542","stars":0,"updatedAt":"2026-10-22T01:29:18Z","license":null,"unreviewed":false,"capabilities":null,"topics":["openrevo-plugin"],"homepage":null,"entry":"index.html","target_slot":null,"slot_height":null,"min_host_version":null,"permissions":null,"service":null,"shortcuts":null,"watchers":null,"window":null,"telemetry":null,"theme_css":null,"background_css":null,"image":null},{"id":"openrevo-plugin-power","name":"自定义功耗插件","version":"0.1.0","author":"xmsjx","plugin_type":"tab","description":"OpenRevo 标签页：CPU 功耗墙（STAPM/慢速/快速 + 时间窗）、温度墙、AMD Curve Optimizer（全核/每核负压）、FMax；Intel 平台的 core/cache 偏移与倍频。只写勾选项、写后回读；需要 PawnIO 驱动与管理员代理。GPL-3.0。","repo":"xmsjx/openrevo-plugin-power","subpath":"","branch":"main","commit":"8e955573a3838dc0a4368a420ea647246e408c70","stars":0,"updatedAt":"2026-10-20T07:47:58Z","license":"GPL-3.0","unreviewed":true,"capabilities":null,"topics":["cpu-tuning","openrevo","openrevo-plugin","power-limit"],"homepage":null}]};
 
 const TYPE_LABEL = {
   skin: '主窗皮肤', background: '背景壁纸', tab: '面板插槽',
@@ -1371,8 +1374,13 @@ async function controlService(entry, action) {
     const st = await serviceStatus(entry);
     state.serviceStatus = state.serviceStatus || {};
     state.serviceStatus[entry.id] = st;
-    toast(st.running ? `服务运行中${st.pid ? `（PID ${st.pid}）` : ''}` : '服务已停止');
     render();
+    // 只有查询真的答了才报状态。查询失败时 `running` 是默认 false，
+    // 照读就会把「查不到」说成「已停止」—— 那是对宿主行为的编造。
+    toast(st.error
+      ? `已发送${action === 'start' ? '启动' : '停止'}请求，但状态查询失败`
+      : (st.running ? `服务运行中${st.pid ? `（PID ${st.pid}）` : ''}` : '服务已停止'),
+    !!st.error);
   } finally {
     state.busy = null;
     render();
@@ -1910,8 +1918,7 @@ function render() {
         <b>插件是第三方代码，以你的权限运行。</b>本市场只做来源绑定与静态披露，不构成安全审计。
         安装即把代码写入插件目录，卸载即删除对应文件夹 —— 请只安装你信任的来源。
       </div>
-    </div>
-    <div id="toast" class="mkt-toast" hidden></div>`;
+    </div>`;
 
   bind();
 }

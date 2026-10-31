@@ -289,7 +289,15 @@ if EXPECT_LIFECYCLE:
         and a.get('via') is None
         for a in en_args
     )
-    life_ok = dis_ok and en_ok and not (life.get('mockErrors') or [])
+    # 成功必须看得见：teost 容器在 #app 之外，render() 不会再把它冲掉。
+    # 断言「点了之后页面上真有这句话」—— 只断言 IPC 发了是看不到用户体感回归的。
+    toast_ok = ('已发送停用请求' in (life.get('toastAfterDisable') or '')
+                and '已发送启用请求' in (life.get('toastAfterEnable') or ''))
+    if not toast_ok:
+        print("启停成功没有可见反馈：disable=", repr(life.get('toastAfterDisable')),
+              " enable=", repr(life.get('toastAfterEnable')))
+    life_ok = dis_ok and en_ok and toast_ok and not (life.get('mockErrors') or [])
+    print("toast_ok=", toast_ok, "disable=", repr(life.get('toastAfterDisable')))
     if EXPECT_NO_SERVICE_CAP:
         # 能力缺失时按钮要画出来但 disabled —— 藏起来等于骗用户「宿主支持」。
         # 同时**一条服务类 IPC 都不许发**：旧宿主上 get_plugin_service_status 本身

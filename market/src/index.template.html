@@ -18,6 +18,9 @@
 </head>
 <body>
 <div id="app"></div>
+<!-- toast 必须挂在 #app 之外：render() 整块重写 #app.innerHTML，
+     放在里面会被重建掉 —— 调用方 toast() 之后紧接 render() 时消息当场消失。 -->
+<div id="toast" class="mkt-toast" hidden></div>
 <script>
 /*__MARKET_JS__*/
 </script>

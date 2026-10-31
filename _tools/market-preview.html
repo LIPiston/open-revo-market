@@ -520,10 +520,16 @@ async function exerciseLifecycle() {
   await new Promise((r) => setTimeout(r, 400));
   const afterDisable = ENABLE_ARGS.slice(before);
 
+  const toastEl = d.getElementById('toast');
+  // 停用成功后的 toast 文本。render() 会整块重写 #app，若 toast 挂在里面就会被
+  // 当场冲掉 —— 用户点了按钮什么反馈都没有。这里抓的就是「用户有没有看到反馈」。
+  const toastAfterDisable = toastEl ? toastEl.textContent.trim() : null;
+
   const before2 = ENABLE_ARGS.length;
   d.querySelector('[data-act="enable"]') && d.querySelector('[data-act="enable"]').click();
   await new Promise((r) => setTimeout(r, 400));
   const afterEnable = ENABLE_ARGS.slice(before2);
+  const toastAfterEnable = (d.getElementById('toast') || {}).textContent || '';
 
   const svcStart = d.querySelector('[data-act="service-start"]');
   const svcStop = d.querySelector('[data-act="service-stop"]');
@@ -532,6 +538,8 @@ async function exerciseLifecycle() {
     lifecycle: 'clicked',
     disableArgs: afterDisable,
     enableArgs: afterEnable,
+    toastAfterDisable: toastAfterDisable,
+    toastAfterEnable: toastAfterEnable.trim(),
     // 无 service 声明的条目不该画服务按钮；有声明但宿主没开放能力时必须是 disabled
     hasServiceBtns: !!(svcStart && svcStop),
     serviceDisabled: !!(svcStart && svcStart.disabled),

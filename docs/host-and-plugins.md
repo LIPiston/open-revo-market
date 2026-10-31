@@ -75,7 +75,7 @@ tab 的 iframe 拿不到这段脚本，但宿主把 `__OPENREVO_BRIDGE__` 挂在
 |---|---|---|
 | 读 `window.parent.__TAURI_INTERNALS__` | ✅ | 同源 |
 | 读 `window.parent.document` | ✅ | 同源（用来镜像主题） |
-| `invoke('get_custom_plugins')` | ✅ | 只读命令可用 |
+| `invoke('get_custom_plugins')` | ✅ | 只读命令可用；返回的条目**不含 `enabled`** |
 | `fetch` 到 GitHub API | ✅ | 有 `Access-Control-Allow-Origin: *` |
 | `window.open(...)` | ❌ 返回 `null` | 无 `allow-popups` |
 | `<a download>` | ⚠️ 不落盘 | 无 `allow-downloads` |

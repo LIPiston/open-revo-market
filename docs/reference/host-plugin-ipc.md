@@ -16,6 +16,7 @@ serde 字段，**不是照抄第三方文档**。
 | `reload_plugins` | — | 插件列表 | 重扫插件目录 |
 | `get_plugin_manifest` | `id` | manifest 原文 | 读已装插件的清单 |
 | `set_plugin_enabled_unified` | `id`, `enabled` | 布尔 | skin / background / 其它统一开关 |
+| `set_custom_plugin_enabled` | `pluginId`, `enabled` | 布尔 | 同上，但字段名不同（回退链见 §1.1） |
 | `open_external_url` | `url` | 布尔 | 系统浏览器打开（仅 http/https） |
 | `write_clipboard` | `text` | 布尔 | 宿主代写剪贴板 |
 | `start_plugin_service` | `id` | 服务状态 | 拉起伴随服务 |

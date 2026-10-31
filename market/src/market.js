@@ -683,8 +683,13 @@ async function controlService(entry, action) {
     const st = await serviceStatus(entry);
     state.serviceStatus = state.serviceStatus || {};
     state.serviceStatus[entry.id] = st;
-    toast(st.running ? `服务运行中${st.pid ? `（PID ${st.pid}）` : ''}` : '服务已停止');
     render();
+    // 只有查询真的答了才报状态。查询失败时 `running` 是默认 false，
+    // 照读就会把「查不到」说成「已停止」—— 那是对宿主行为的编造。
+    toast(st.error
+      ? `已发送${action === 'start' ? '启动' : '停止'}请求，但状态查询失败`
+      : (st.running ? `服务运行中${st.pid ? `（PID ${st.pid}）` : ''}` : '服务已停止'),
+    !!st.error);
   } finally {
     state.busy = null;
     render();
@@ -1222,8 +1227,7 @@ function render() {
         <b>插件是第三方代码，以你的权限运行。</b>本市场只做来源绑定与静态披露，不构成安全审计。
         安装即把代码写入插件目录，卸载即删除对应文件夹 —— 请只安装你信任的来源。
       </div>
-    </div>
-    <div id="toast" class="mkt-toast" hidden></div>`;
+    </div>`;
 
   bind();
 }

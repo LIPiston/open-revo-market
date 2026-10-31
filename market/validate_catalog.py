@@ -187,7 +187,12 @@ def validate(path: Path) -> list[str]:
             errs.append(f"{where}: E14 min_host_version 必须是三段数字 SemVer 或 null，得到 {mhv!r}")
 
         # E15 slot 插件靠 target_slot 决定插在哪，缺了就是装上也看不见。
-        if ptype == "slot":
+        #
+        # **只对已审核条目强制**：未审核条目是爬虫从 topic 自动收的，作者的清单
+        # 写不全（或把字段写成 targetSlot）不该让本仓库的验收闸变红 ——
+        # 闸红了 CI 就跑不完，目录从此停止刷新。要让第三方数据影响验收，
+        # 得先有人把它收进正典（unreviewed=false），那是人工动作。
+        if ptype == "slot" and p.get("unreviewed") is False:
             ts = p.get("target_slot")
             if not (isinstance(ts, str) and ts.strip()):
                 errs.append(f"{where}: E15 plugin_type=slot 必须声明 target_slot，得到 {ts!r}")

@@ -147,6 +147,15 @@ def detect_subpaths(repo: str, branch: str, token: str | None, max_probe: int = 
 
 SEMVER3 = re.compile(r"^\d+\.\d+\.\d+$")
 
+# 由 `extract_manifest_fields()` 抽出的清单字段。`merge()` 用这份名单在
+# 「爬虫这次抓不到」（网络抖动 / manifest 解析失败）时沿用上一份目录里的值 ——
+# 否则一次临时失败就会把已披露的能力、插槽、服务声明全部刷成 null。
+MANIFEST_FIELDS = (
+    "entry", "target_slot", "slot_height", "min_host_version",
+    "permissions", "service", "shortcuts", "watchers",
+    "window", "telemetry", "theme_css", "background_css", "image",
+)
+
 
 def _nonempty_str(v) -> str | None:
     """非空字符串，其余（含纯空白）一律 None。"""
@@ -160,10 +169,18 @@ def sanitize_min_host_version(v) -> str | None:
 
 
 def sanitize_permissions(v) -> list[str] | None:
-    """字符串数组或 None。非字符串元素丢弃，不替换成空串。"""
+    """字符串数组或 None。非字符串元素丢弃，不替换成空串。
+
+    **显式写 `[]` 与「元素全读不懂」必须区分**：前者是作者声明了「没有额外权限」，
+    后者是一句都没看懂。都收敛成 `[]` 会把后者伪装成前者，UI 上就成了
+    「声明为空」—— 那是编造。所以空列表原样保留，全非法才退回 None。
+    """
     if not isinstance(v, list):
         return None
-    return [x for x in v if isinstance(x, str) and x.strip()]
+    if not v:
+        return []
+    kept = [x for x in v if isinstance(x, str) and x.strip()]
+    return kept or None
 
 
 def sanitize_service(v) -> dict | None:
@@ -494,6 +511,12 @@ def merge(prev: dict, fresh: dict) -> dict:
                     p[f] = False          # 正典标记一旦落下，爬虫不得翻回未审核
                 elif old.get(f) is not None and old.get(f) != [] and p.get(f) in (None, ""):
                     p[f] = old[f]         # 爬虫没抓到，沿用人工写的
+            # 清单字段同理：远端的 fetch_manifest 偶尔失败一次，不该让目录里的
+            # 「挂载插槽 / 权限 / 服务 / 兼容性」这些披露整块消失。抓到了就以新值为准
+            # （作者可能真的删掉了某项声明），只有抓不到（None）才沿用旧值。
+            for f in MANIFEST_FIELDS:
+                if p.get(f) is None and old.get(f) is not None:
+                    p[f] = old[f]
             # sha256 是人工算好后写进目录的「可验证安装」凭据，爬虫抓不到也不能丢 ——
             # 丢了就等于悄悄把安装从"可校验"降级成"仅传输完整"。
             if old.get("sha256"):
@@ -539,6 +562,10 @@ def local_only_catalog(out: Path) -> dict | None:
         for f in ("commit", "stars", "updatedAt", "license"):
             if e.get(f) is None and old.get(f) is not None:
                 e[f] = old[f]
+        # sha256 是人工算好的「可验证安装」凭据，本地扫描永远算不出来 ——
+        # 与 merge() 同一口径：抓不到不等于不存在，丢了就是把安装悄悄降级成「仅传输完整」。
+        if e.get("sha256") is None and old.get("sha256") is not None:
+            e["sha256"] = old["sha256"]
     # 远端条目原样保留；本仓库的条目以本地 manifest 为准（可新增、可更新）
     kept = [p for key, p in prev_by_key.items() if key not in local]
     final = kept + list(local.values())
