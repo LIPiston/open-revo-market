@@ -1,6 +1,6 @@
 {
   "format": 1,
-  "generatedAt": "2026-10-31T06:58:15+00:00",
+  "generatedAt": "2026-10-31T18:31:56+00:00",
   "topic": "openrevo-plugin",
   "count": 2,
   "plugins": [
@@ -14,9 +14,9 @@
       "repo": "LIPiston/open-revo-market",
       "subpath": "plugin-market",
       "branch": "main",
-      "commit": "a311a5f7736002f22eeef2945130a1b1c3222ce6",
+      "commit": "6848cff4fc5a4d4c0660d522f52bd40fa464bb29",
       "stars": 0,
-      "updatedAt": "2026-10-31T00:45:38Z",
+      "updatedAt": "2026-10-31T13:37:41Z",
       "license": null,
       "unreviewed": false,
       "capabilities": null,
@@ -60,7 +60,27 @@
         "openrevo-plugin",
         "power-limit"
       ],
-      "homepage": null
+      "homepage": null,
+      "entry": "index.html",
+      "target_slot": null,
+      "slot_height": null,
+      "min_host_version": "0.9.4",
+      "permissions": null,
+      "service": {
+        "executable": "agent/bin/ux-agent.exe",
+        "elevated": true,
+        "auto_start": true,
+        "auto_stop": true,
+        "health_url": "http://127.0.0.1:18946/ping",
+        "port": 18946
+      },
+      "shortcuts": null,
+      "watchers": null,
+      "window": null,
+      "telemetry": null,
+      "theme_css": null,
+      "background_css": null,
+      "image": null
     }
   ]
 }
