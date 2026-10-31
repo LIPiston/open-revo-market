@@ -56,7 +56,7 @@ open-revo-market\
 | 文档 | 内容 |
 |---|---|
 | [`docs/market.md`](docs/market.md) | 市场完整说明：能力、宿主降级、构建、预览、验收闸、加速、安装卸载 |
-| [`docs/host-and-plugins.md`](docs/host-and-plugins.md) | 插件生态实测：五种形态、sandbox、宿主 IPC、下载链路 |
+| [`docs/host-and-plugins.md`](docs/host-and-plugins.md) | 插件生态实测：八种形态、sandbox、宿主 IPC、下载链路 |
 | [`docs/project-status.md`](docs/project-status.md) | 已知边界 |
 | [`docs/reference/host-plugin-ipc.md`](docs/reference/host-plugin-ipc.md) | 插件 IPC 清单：签名、能力位、安装器防线 |
 
@@ -65,8 +65,10 @@ open-revo-market\
 ## 注意事项
 
 * **别手改产物**：改 `market/src/`，然后 `python build_market.py --install`。
-* 当前基线：cyber / mono 双主题 × 两种宿主 mock + 加速专项，**六轮全 PASS**，0 JS 错误。
-* `widget` / `slot` 两种形态只从前端字面量确认，**未做端到端实测**；
-  `service` / `shell` / `driver` 在前端里无字面量，不要依据手册对外承诺。
+* 当前基线：cyber / mono 双主题 × 两种宿主 mock + 加速 / 分页 / 形态 / 披露 / 生命周期五轮专项，
+  **八轮全 PASS**，0 JS 错误。
+* 八种 `plugin_type` 的取值已确认在官方手册内；其中 `service` / `shell` / `driver`
+  在前端 JS 里没有注入分支，**形态取值的运行行为未做端到端实测** ——
+  市场只按取值筛选与配色，不据此推断运行期行为。
 * 改 `%APPDATA%\OpenRevo\config.json` 前**先备份**：宿主运行中会整份回写。
 * **许可**：仓库目前**没有 `LICENSE` 文件**（尽管目录条目声明 MIT）——如需正式授权请补一份。

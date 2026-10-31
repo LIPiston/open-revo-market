@@ -7,7 +7,7 @@
 | 文档 | 内容 |
 |---|---|
 | [`market.md`](market.md) | 市场完整说明：能力、宿主能力降级、目录机制、构建、本地预览、验收闸、安装卸载 |
-| [`host-and-plugins.md`](host-and-plugins.md) | 插件生态实测：五种形态、`tab` 契约与 sandbox、宿主 IPC、下载链路 |
+| [`host-and-plugins.md`](host-and-plugins.md) | 插件生态实测：八种形态、`tab` 契约与 sandbox、宿主 IPC、下载链路 |
 | [`project-status.md`](project-status.md) | 已知边界 |
 | [`reference/host-plugin-ipc.md`](reference/host-plugin-ipc.md) | 插件 IPC 逐条清单：签名、能力位、安装器防线 |
 

@@ -27,7 +27,7 @@ serde 字段，**不是照抄第三方文档**。
 > 而 `load_plugin_html` / `load_plugin_theme_css` / `load_plugin_background_css`
 > 用的是 **`pluginId`**。两族不能互相套用 —— 传错会以 `missing required key` 被拒收。
 
-> ⚠️ **`restart_plugin_service` 不存在。** exe 里 `restart_plugin` 全 0 命中，
+> ⚠️ **没有「重启服务」这一条命令。** exe 里 `restart_plugin` 全 0 命中，
 > 也不在分发比较链里。要重启只能 stop + start。
 
 > `install_plugin_from_url` 的必需字段是 **`{ id, url }`**，`subpath` / `sha256` 可选。
@@ -126,8 +126,8 @@ def present(cmd):
         return 'exact'
     return 'absent'
 
-for c in ['install_plugin_from_url', 'reload_plugins', 'restart_plugin_service',
-          'get_plugin_host_capabilities']:
+for c in ['install_plugin_from_url', 'reload_plugins', 'get_plugin_host_capabilities',
+          'get_plugin_service_status']:
     print(f'{c:32s} {present(c)}')
 ```
 

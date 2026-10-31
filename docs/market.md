@@ -25,6 +25,7 @@
 | `can_uninstall` | 卡片上出现【卸载】，目录移入回收站 | 隐藏【卸载】 |
 | `can_reload` | 装完调 `reload_plugins` 自动重扫 | 退回 `get_custom_plugins` 只读枚举 |
 | `can_read_manifest` | 读已装版本，标出「可更新」 | 不显示更新提示 |
+| `can_manage_service` | 有 `service` 声明的插件给服务启停按钮与状态文字 | 按钮 disabled，且**一条服务类 IPC 都不发** |
 
 一键安装时市场**只发一条 IPC**，所有危险动作都在宿主侧：强制 HTTPS、可选 `sha256` 校验、
 解压防 Zip Slip、目标必须落在 AppData 边界内。市场自己不下载、不写盘 ——
@@ -56,7 +57,7 @@
 |---|---|
 | 插件目录 | 仓库根放 `manifest.json`，**或**某个子目录里放（monorepo 自动扫一层） |
 | 必填 | `manifest.json` 的 `id` / `name` / `version` / `plugin_type`；`id` 就是安装后的目录名 |
-| `plugin_type` | `skin` / `background` / `tab` / `widget` / `slot`（0.9.1 实测枚举） |
+| `plugin_type` | `skin` / `background` / `tab` / `widget` / `slot` / `service` / `shell` / `driver`（八种，见 [`host-and-plugins.md`](host-and-plugins.md) §1） |
 | 能力字段 | 由工具侧扫描填写，作者手写无效 |
 | 作者 | 目录里的作者**一律取仓库归属者**（`owner`）。manifest 的 `author` 只是自填展示名，不入目录 |
 
@@ -78,7 +79,7 @@
 | `build_market.py` | 把三者内联成**单文件** `plugin-market/index.html`，并做产物自检；`--check` / `--install` |
 | `market/catalog.json` | 策展目录（构建时内联为离线兜底 `SEED`） |
 | `market/crawl_topic.py` | 爬 GitHub topic → 生成 / 合并目录（`--dry-run` / `--merge` / `--out`） |
-| `market/validate_catalog.py` | 目录结构校验 E1–E12，CI 与本地共用 |
+| `market/validate_catalog.py` | 目录结构校验 E1–E15，CI 与本地共用 |
 | `.github/workflows/refresh-catalog.yml` | 每小时自动爬一次，**只在内容变化时**提交 |
 | `plugin-market/` | 构建产物（已入库） |
 | `_tools/install-market.ps1` | 一条命令安装（在线拉取现成产物 / `-Local` / `-From` / `-DryRun`） |
@@ -113,7 +114,7 @@ python -m http.server 8791
 
 ```bash
 python build_market.py --check                          # 产物自检
-python market/validate_catalog.py market/catalog.json   # 目录 E1–E12
+python market/validate_catalog.py market/catalog.json   # 目录 E1–E15
 bash _tools/market-verify.sh cyber                      # 验收闸
 bash _tools/market-verify.sh mono                       # 另一套主题
 ```
@@ -130,17 +131,27 @@ bash _tools/market-verify.sh mono                       # 另一套主题
 * 「实时发现」能点且不抛异常；
 * mono 下类型徽标去饱和（`sat < 0.12`），且**必须真的取到徽标** —— 取不到算失败。
 
-另外还有**两轮专项**：
+另外还有**五轮专项**（合成目录只落在 `_shots/`，不进 `market/catalog.json`）：
 
 * **加速开关**（`?proxy=1`）：勾上后 `install_plugin_from_url` 的 `url` 必须带
   `https://gh-proxy.com/` 前缀；不勾时必须不带。两条都测，否则「开关画了没接线」
   和「默认偷偷走代理」都验不出来。
 * **分页/滚动**（30 条临时目录）：滚动容器真的可滚、翻页真的能翻且回顶部。
+* **形态筛选**（`service` / `shell` / `driver` 各一条）：三个筛选按钮出现且计数为 1，
+  卡片真的用上对应的 `type-*` 徽标类名。
+* **披露与兼容徽章**（`slot` + 三条 `min_host_version`）：卡片上真的写出
+  「挂载插槽 / `power.hardware_limit` / 54px」；`0.0.1` 不报过低、`99.0.0` 报过低、
+  非法版本串不渲染徽章。
+* **生命周期**（一条带 `service` 的已装条目）：【停用】真发
+  `set_plugin_enabled_unified { id, enabled:false }`、【启用】发 `enabled:true`；
+  点【启动服务】真发 `start_plugin_service` 且状态文字跟着变；
+  宿主没有 `can_manage_service` 时按钮 disabled，且**一条服务类 IPC 都不发**。
 
 > 走 **HTTP 而非 `file://`**：真实宿主里插件文档 origin 是 `tauri://localhost`（CORS 语义），
 > `file://` 下 `fetch` 直接被拒，会让「目录能拉下来」这条路径永远测不到。
 
-当前基线：cyber 与 mono 双主题 × 两种宿主 mock + 加速专项，**六轮全 PASS**，0 JS 错误。
+当前基线：cyber 与 mono 双主题各跑 **八轮**（两种宿主 mock + 五轮专项 + 服务能力缺失），
+全 PASS，0 JS 错误。
 
 ## 8. 下载链路与加速
 

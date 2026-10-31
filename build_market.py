@@ -27,7 +27,7 @@ PLUGIN_ID = "plugin-market"
 MANIFEST = {
     "id": PLUGIN_ID,
     "name": "插件市场",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "author": "LIPiston",
     "description": "浏览 GitHub 上带 openrevo-plugin topic 的第三方插件，宿主支持时一键安装/卸载。",
     "plugin_type": "tab",

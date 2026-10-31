@@ -1361,7 +1361,7 @@ async function serviceStatus(entry) {
   }
 }
 
-/** 服务的启动 / 停止。重启只能 stop + start —— exe 里没有 `restart_plugin_service`。 */
+/** 服务的启动 / 停止。exe 里只有这两条，没有单独的重启命令，重启 = stop + start。 */
 async function controlService(entry, action) {
   if (!canManageService()) throw new Error('本版宿主没有开放服务管理接口');
   state.busy = entry.id;

@@ -59,7 +59,7 @@ const SEED = {
   count: 1,
   plugins: [
     {
-      id: 'plugin-market', name: '插件市场', version: '1.1.0',
+      id: 'plugin-market', name: '插件市场', version: '1.2.0',
       author: 'LIPiston', plugin_type: 'tab',
       description: '浏览 GitHub 上带 openrevo-plugin topic 的第三方插件，查看能力披露，并给出最短安装路径。',
       repo: 'LIPiston/open-revo-market', subpath: 'plugin-market', branch: 'main',
@@ -673,7 +673,7 @@ async function serviceStatus(entry) {
   }
 }
 
-/** 服务的启动 / 停止。重启只能 stop + start —— exe 里没有 `restart_plugin_service`。 */
+/** 服务的启动 / 停止。exe 里只有这两条，没有单独的重启命令，重启 = stop + start。 */
 async function controlService(entry, action) {
   if (!canManageService()) throw new Error('本版宿主没有开放服务管理接口');
   state.busy = entry.id;

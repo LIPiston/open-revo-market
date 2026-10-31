@@ -4,20 +4,31 @@
 
 > 命令签名与安装器防线：[`reference/host-plugin-ipc.md`](reference/host-plugin-ipc.md)。
 
-## 1. 五种形态
+## 1. 八种形态
 
-前端 JS 里实际出现的 `plugin_type` 字面量：
+`plugin_type` 的八个取值：
 
-| 形态 | 说明 | 注入点 / 载体 |
-|---|---|---|
-| `skin` | 主窗皮肤 | `<style id="openrevo-theme-skin">` |
-| `background` | 背景壁纸 | `<style id="openrevo-custom-background">` |
-| `tab` | **面板插槽**（市场就是它） | 顶栏胶囊 → 沙盒 iframe |
-| `widget` | 桌面挂件 | 独立 WebView2 窗口 |
-| `slot` | 微插槽 | 按 `target_slot` 填进宿主既有页面 |
+| 形态 | 说明 | 注入点 / 载体 | 取证来源 |
+|---|---|---|---|
+| `skin` | 主窗皮肤 | `<style id="openrevo-theme-skin">` | 前端字面量 |
+| `background` | 背景壁纸 | `<style id="openrevo-custom-background">` | 前端字面量 |
+| `tab` | **面板插槽**（市场就是它） | 顶栏胶囊 → 沙盒 iframe | 前端字面量 |
+| `widget` | 桌面挂件 | 独立 WebView2 窗口 | 前端字面量 |
+| `slot` | 微插槽 | 按 `target_slot` 填进宿主既有页面 | 前端字面量 |
+| `service` | 无头服务 | 伴随进程（清单 `service` 段） | 官方手册 |
+| `shell` | 完整外壳 | 整窗替换 | 官方手册 |
+| `driver` | 硬件驱动 | 需要底层驱动 / 提权 | 官方手册 |
 
-`service` / `shell` / `driver` 在前端里**没有字面量**，只在官方手册矩阵中出现，
-是否真实存在**未证实** —— 不要依据手册对外承诺。
+后三种在前端 JS 里没有对应的注入分支：它们的取值与语义来自官方手册，
+**宿主侧的运行行为没有做过端到端实测**。市场对 `plugin_type` 只做两件事 ——
+按取值分组筛选、按取值配色 —— **不据此推断任何运行期行为**，也不承诺这八种都能装得上。
+
+`target_slot` 只在 `slot` 形态下有意义；`slot_height` 同理（CSS 长度串）。
+
+两个**宿主不校验**的字段，市场只在披露区如实转述、不当成授权依据：
+
+- `permissions`：清单自述的权限串数组，宿主不读它做拦截 —— 真正的能力边界仍由沙盒与 IPC 决定；
+- `telemetry.enabled` / `telemetry.sensors`：同为自述，市场只写「清单声明…」。
 
 ## 2. `tab` 插件如何被加载（市场选它的原因）
 
@@ -86,7 +97,8 @@ get_plugin_host_capabilities -> { host_version, can_install, can_uninstall, can_
 命令不存在（宿主版本较旧）或某个 `can_*` 为假 ⇒ 市场按能力位降级，
 **不按版本号猜、也不假装能装**（见 [`market.md`](market.md) §2）。
 
-另外注意：`restart_plugin_service` **不存在**，重启服务只能 stop + start。
+另外注意：宿主**没有「重启服务」这一条命令**（`restart_plugin` 在 exe 里 0 命中），
+重启只能 stop + start。
 
 ## 4. 字段名：两族不能互相套用
 
