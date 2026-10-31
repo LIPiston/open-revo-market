@@ -9,11 +9,16 @@
   * **不内置过期快照**：目录每次重新生成，`generatedAt` 如实记录。
   * **失败不清空**：源站不可达时保留旧 catalog，只更新 `generatedAt`？不 —— 那是撒谎。
     正确做法是**报错退出、不动文件**，让上一次的产物继续用。
+  * **catalog.json 是纯派生物，不是可手改的账本**：每小时全量重写，不做字段继承。
+    人工判断（审核标记、覆写描述、能力扫描结论、sha256、下架）一律写在
+    `market/overrides.json`，抓完之后由 `overrides.apply()` 无条件叠加 —— 见该模块注释。
+    以前 merge() 里那套「人工改过的字段保留」把两种东西混在了一起：人工决策
+    与「这轮没抓到所以沿用上次」，后者会让一次网络抖动变成永久的过期数据。
 
 用法：
     python market/crawl_topic.py                 # 需要 GITHUB_TOKEN（CI 里自带）
     python market/crawl_topic.py --dry-run       # 只打印，不写文件
-    python market/crawl_topic.py --merge         # 与现有 catalog 合并（保留已审核条目的人工字段）
+    python market/crawl_topic.py --local-only    # 不联网：重建本仓库条目 + 重放覆写层
 """
 from __future__ import annotations
 
@@ -30,17 +35,16 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 CATALOG = ROOT / "market" / "catalog.json"
+OVERRIDES = ROOT / "market" / "overrides.json"
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import overrides  # noqa: E402  —— 同目录模块，必须在 sys.path 补好之后导入
 
 TOPIC = "openrevo-plugin"
 API = "https://api.github.com"
 
 # 实测暴露的 plugin_type 枚举（v0.9.1 前端 JS 里的字面量 + 手册矩阵）
 KNOWN_TYPES = {"skin", "background", "tab", "widget", "slot", "service", "shell", "driver"}
-
-# 本仓库自己的插件：目录里仍会列出，但标记成已审核（它们与目录同源同审）
-CURATED = {
-    "LIPiston/open-revo-market:plugin-market",
-}
 
 # 本仓库（目录的同源作者）。作者标识一律取仓库归属者，见 REPO_OWNER。
 REPO = "LIPiston/open-revo-market"
@@ -146,15 +150,6 @@ def detect_subpaths(repo: str, branch: str, token: str | None, max_probe: int = 
 
 
 SEMVER3 = re.compile(r"^\d+\.\d+\.\d+$")
-
-# 由 `extract_manifest_fields()` 抽出的清单字段。`merge()` 用这份名单在
-# 「爬虫这次抓不到」（网络抖动 / manifest 解析失败）时沿用上一份目录里的值 ——
-# 否则一次临时失败就会把已披露的能力、插槽、服务声明全部刷成 null。
-MANIFEST_FIELDS = (
-    "entry", "target_slot", "slot_height", "min_host_version",
-    "permissions", "service", "shortcuts", "watchers",
-    "window", "telemetry", "theme_css", "background_css", "image",
-)
 
 
 def _nonempty_str(v) -> str | None:
@@ -374,9 +369,6 @@ def build_entry(
         entry["plugin_type_raw"] = entry["plugin_type"]
         entry["plugin_type"] = "tab"
 
-    if f"{full}:{subpath}" in CURATED:
-        entry["unreviewed"] = False
-
     return entry
 
 
@@ -389,7 +381,9 @@ def local_entries() -> list[dict]:
     """收录本仓库自带的插件。
 
     topic 刚起步时它是空集，光靠爬取目录里会一条都没有；而本仓库就是目录的同源作者，
-    把自己的插件读本地 manifest 收进来既准确又不需要网络。这些条目直接标「已审核」。
+    把自己的插件读本地 manifest 收进来既准确又不需要网络。
+
+    审核标记不在这里定 —— 和远端条目一样，由 `overrides.json` 说了算。
     """
     out: list[dict] = []
     for d in sorted(ROOT.iterdir()):
@@ -420,7 +414,7 @@ def local_entries() -> list[dict]:
             "stars": None,
             "updatedAt": None,
             "license": None,
-            "unreviewed": False,      # 与目录同源同审
+            "unreviewed": True,       # 自动收录，默认未审核；审核结论写在 overrides.json
             "capabilities": None,     # 仍未做静态扫描 —— 三态里的"未扫描"
             "topics": [TOPIC],
             "homepage": None,
@@ -496,46 +490,54 @@ def crawl(token: str | None, include_local: bool = True) -> dict:
     }
 
 
-def merge(prev: dict, fresh: dict) -> dict:
-    """与上一份目录合并：
-      * 人工改过的字段（进正典后 unreviewed=false、手写 description/capabilities）保留；
-      * 仓库侧字段（stars / updatedAt / commit / version）以新抓到的为准。"""
-    by_key = {f"{p['repo']}:{p.get('subpath','')}": p for p in (prev.get("plugins") or [])}
-    out = []
-    for p in fresh["plugins"]:
-        key = f"{p['repo']}:{p.get('subpath','')}"
-        old = by_key.get(key)
-        if old:
-            for f in ("unreviewed", "capabilities", "description", "name", "plugin_type"):
-                if f == "unreviewed" and old.get(f) is False:
-                    p[f] = False          # 正典标记一旦落下，爬虫不得翻回未审核
-                elif old.get(f) is not None and old.get(f) != [] and p.get(f) in (None, ""):
-                    p[f] = old[f]         # 爬虫没抓到，沿用人工写的
-            # 清单字段同理：远端的 fetch_manifest 偶尔失败一次，不该让目录里的
-            # 「挂载插槽 / 权限 / 服务 / 兼容性」这些披露整块消失。抓到了就以新值为准
-            # （作者可能真的删掉了某项声明），只有抓不到（None）才沿用旧值。
-            for f in MANIFEST_FIELDS:
-                if p.get(f) is None and old.get(f) is not None:
-                    p[f] = old[f]
-            # sha256 是人工算好后写进目录的「可验证安装」凭据，爬虫抓不到也不能丢 ——
-            # 丢了就等于悄悄把安装从"可校验"降级成"仅传输完整"。
-            if old.get("sha256"):
-                p["sha256"] = old["sha256"]
-        out.append(p)
+def entry_from_override(key: str, patch: dict) -> dict:
+    """覆写引用了一个本轮没抓到的条目时，按覆写内容补建一条。
 
-    # 人工加进 catalog 但不在 topic 结果里的条目（比如自建 CDN 托管）也保留
-    fresh_keys = {f"{p['repo']}:{p.get('subpath','')}" for p in fresh["plugins"]}
-    for p in prev.get("plugins") or []:
-        key = f"{p['repo']}:{p.get('subpath','')}"
-        if key not in fresh_keys and p.get("unreviewed") is False:
-            out.append(p)
+    只用于「人工要收录，但 topic 搜不到它」的情形（自建 CDN、临时下架又恢复）。
+    必须显式给出 `id` —— 目录里 `id` 是安装后的目录名，猜不出来就明说，不编造。
+    """
+    repo, _, sub = key.partition(overrides.KEY_SEP)
+    pid = patch.get("id")
+    if not (isinstance(pid, str) and pid.strip()):
+        raise overrides.OverrideError(
+            f"{key}: 目录里没有这个条目，覆写补建时必须显式给出 id"
+        )
+    base = {
+        "id": pid,
+        "name": patch.get("name") or pid,
+        "version": patch.get("version") or "",
+        "author": patch.get("author") or repo.split("/")[0],
+        "plugin_type": patch.get("plugin_type") or "tab",
+        "description": patch.get("description") or "",
+        "repo": repo,
+        "subpath": sub,
+        "branch": patch.get("branch") or "main",
+        "commit": None,
+        "stars": None,
+        "updatedAt": None,
+        "license": None,
+        "unreviewed": True,       # 补建默认仍未审核；要进正典请在覆写里写 false
+        "capabilities": None,     # 没扫描过
+        "topics": [],
+        "homepage": None,
+        "entry": "index.html",
+        "target_slot": None,
+        "slot_height": None,
+        "min_host_version": None,
+        "permissions": None,
+        "service": None,
+        "shortcuts": None,
+        "watchers": None,
+        "window": None,
+        "telemetry": None,
+        "theme_css": None,
+        "background_css": None,
+        "image": None,
+    }
+    return base
 
-    fresh["plugins"] = sorted(out, key=lambda e: (-(e.get("stars") or 0), e["repo"]))
-    fresh["count"] = len(fresh["plugins"])
-    return fresh
 
-
-def local_only_catalog(out: Path) -> dict | None:
+def local_only_catalog(out: Path, overrides_map: dict[str, dict]) -> dict | None:
     """跳过网络，只重建本仓库自带的插件条目，与现有目录合并。
 
     用途：本仓库新增/修改自己的插件时刷新目录，不需要 GITHUB_TOKEN、也不依赖
@@ -551,8 +553,8 @@ def local_only_catalog(out: Path) -> dict | None:
         log(f"现有目录解析失败：{e}")
         return None
 
-    prev_by_key = {f"{p.get('repo')}:{p.get('subpath', '')}": p for p in (prev.get("plugins") or [])}
-    local = {f"{e['repo']}:{e['subpath']}": e for e in local_entries()}
+    prev_by_key = {overrides.key_of(p): p for p in (prev.get("plugins") or [])}
+    local = {overrides.key_of(e): e for e in local_entries()}
     # 本地扫描读不到仓库侧事实：同一条目沿用上次真实抓取的值，
     # 否则一次 --local-only 就会把「可定位到某个 commit」悄悄降级成「只知道分支」。
     for key, e in local.items():
@@ -562,65 +564,76 @@ def local_only_catalog(out: Path) -> dict | None:
         for f in ("commit", "stars", "updatedAt", "license"):
             if e.get(f) is None and old.get(f) is not None:
                 e[f] = old[f]
-        # sha256 是人工算好的「可验证安装」凭据，本地扫描永远算不出来 ——
-        # 与 merge() 同一口径：抓不到不等于不存在，丢了就是把安装悄悄降级成「仅传输完整」。
-        if e.get("sha256") is None and old.get("sha256") is not None:
-            e["sha256"] = old["sha256"]
     # 远端条目原样保留；本仓库的条目以本地 manifest 为准（可新增、可更新）
     kept = [p for key, p in prev_by_key.items() if key not in local]
     final = kept + list(local.values())
-    final = sorted(final, key=lambda e: (e.get("unreviewed", True), -(e.get("stars") or 0), e["repo"]))
+    final.sort(key=lambda e: (e.get("unreviewed", True), -(e.get("stars") or 0), e["repo"]))
 
-    return {
+    catalog = {
         "format": prev.get("format", 1),
         "generatedAt": prev.get("generatedAt"),
         "topic": prev.get("topic", TOPIC),
         "count": len(final),
         "plugins": final,
     }
+    return apply_overrides(catalog, overrides_map)
+
+
+def apply_overrides(catalog: dict, overrides_map: dict[str, dict]) -> dict:
+    """把人工覆写叠加到目录上。**唯一的**人工决定的落点。
+
+    爬虫（全量抓取 / --local-only）都走这里，保证两条路径产出一致。
+    """
+    try:
+        return overrides.apply(
+            catalog, overrides_map,
+            make_entry=entry_from_override,
+            log=log,
+        )
+    except overrides.OverrideError as e:
+        raise SystemExit(f"覆写层应用失败：{e}")
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="抓取 openrevo-plugin topic 生成市场目录")
     ap.add_argument("--dry-run", action="store_true", help="只打印统计，不写文件")
-    ap.add_argument("--merge", action="store_true", help="与现有 catalog.json 合并")
-    ap.add_argument("--out", default=str(CATALOG), help="输出路径")
     ap.add_argument(
         "--local-only",
         action="store_true",
         help="跳过网络，只重建本仓库自带插件条目并与现有目录合并",
     )
+    ap.add_argument("--out", default=str(CATALOG), help="输出路径")
+    ap.add_argument(
+        "--overrides",
+        default=str(OVERRIDES),
+        help="人工覆写层路径（默认 market/overrides.json）",
+    )
     args = ap.parse_args()
 
+    # 覆写层先读：文件有错就立刻失败，别等爬完十分钟的 GitHub 才发现。
+    try:
+        ov = overrides.load(Path(args.overrides))
+    except overrides.OverrideError as e:
+        log(f"覆写层不合法，中止：{e}")
+        return 1
+    log(f"覆写层：{len(ov)} 条（{args.overrides}）")
+
     token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
-    if not token:
-        log("警告：没有 GITHUB_TOKEN，未认证限额 60 次/小时，很可能中途被限速")
 
     if args.local_only:
-        fresh = local_only_catalog(Path(args.out))
+        fresh = local_only_catalog(Path(args.out), ov)
         if fresh is None:
             return 1
-        log(f"共 {fresh['count']} 条：")
-        for p in fresh["plugins"]:
-            log(f"  {p['plugin_type']:12s} {p['repo']}:{p.get('subpath','')}")
-        Path(args.out).write_text(
-            json.dumps(fresh, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
-            newline="\n",
-        )
-        log(f"已写入 {args.out}")
-        return 0
-
-    try:
-        fresh = crawl(token)
-    except Exception as e:  # noqa: BLE001
-        # 失败不写文件 —— 让上一次的产物继续服务，也不假装"目录里没有插件"
-        log(f"抓取失败，保留现有目录不动：{e}")
-        return 1
-
-    if args.merge and Path(args.out).exists():
-        prev = json.loads(Path(args.out).read_text(encoding="utf-8"))
-        fresh = merge(prev, fresh)
+    else:
+        if not token:
+            log("警告：没有 GITHUB_TOKEN，未认证限额 60 次/小时，很可能中途被限速")
+        try:
+            fresh = crawl(token)
+        except Exception as e:  # noqa: BLE001
+            # 失败不写文件 —— 让上一次的产物继续服务，也不假装"目录里没有插件"
+            log(f"抓取失败，保留现有目录不动：{e}")
+            return 1
+        fresh = apply_overrides(fresh, ov)
 
     log(f"\n共 {fresh['count']} 条：")
     by_type: dict[str, int] = {}

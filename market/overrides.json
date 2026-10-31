@@ -1,0 +1,9 @@
+{
+  "format": 1,
+  "_note": "人工覆写层。catalog.json 是爬虫每小时全量重写的派生物，手改会被冲掉 —— 人工判断写在这里。键为 owner/repo:subpath（仓库根条目 subpath 留空）。字段省略或留空（null / \"\"）= 不覆写，保留爬虫抓到的值；其余任何值直接覆盖。\"exclude\": true = 不进目录。字段名写错会直接报错。",
+  "plugins": {
+    "LIPiston/open-revo-market:plugin-market": {
+      "unreviewed": false
+    }
+  }
+}

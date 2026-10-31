@@ -1,8 +1,10 @@
 name: Refresh plugin catalog
 
 # 每小时增量刷新市场目录：抓 GitHub 上带 openrevo-plugin topic 的仓库。
-# 目录是纯派生物 —— 每次全量重爬 + 与上一份合并（保留人工审核标记），
-# 然后只在内容真的变了时提交，避免空转出一堆无意义的历史。
+# catalog.json 是**纯派生物** —— 每轮全量重爬，抓完之后把 market/overrides.json
+# 里的人工判断（审核标记 / 覆写字段 / 下架）无条件叠加一遍。
+# 人工改动写进 overrides.json，catalog.json 里改了也没用。
+# 只在目录真的变了时提交，避免空转出一堆无意义的历史。
 
 on:
   schedule:
@@ -26,11 +28,14 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Check overrides file
+        run: python market/overrides.py market/overrides.json
+
       - name: Crawl openrevo-plugin topic
         env:
           # 用内置 token 提高限额（60/h → 5000/h）；抓取失败会非零退出且不写文件
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python market/crawl_topic.py --merge --out market/catalog.json
+        run: python market/crawl_topic.py --out market/catalog.json
 
       - name: Validate catalog
         run: python market/validate_catalog.py market/catalog.json

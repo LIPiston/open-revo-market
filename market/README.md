@@ -105,9 +105,11 @@ market/
 │   ├── index.template.html   # 模板（含两个占位符）
 │   ├── market.css            # 样式（内联进产物）
 │   └── market.js             # 应用逻辑（内联进产物）
-├── crawl_topic.py            # 抓 openrevo-plugin topic → catalog.json
-├── validate_catalog.py       # 目录校验（E1–E12）
-├── catalog.json              # 生成的目录（CI 每小时刷新）
+├── crawl_topic.py            # 抓 openrevo-plugin topic → catalog.json（再叠加覆写层）
+├── overrides.py              # 人工覆写层的读写与校验
+├── overrides.json            # 人工覆写层：审核标记 / 字段覆写 / sha256 / 下架
+├── validate_catalog.py       # 目录校验（E1–E15）
+├── catalog.json              # 派生的目录（CI 每小时重写，别手改）
 └── PLUGIN_README.md          # 会随插件一起装进插件目录
 
 build_market.py               # 把 src/ 内联成单文件，并做产物自检
@@ -137,9 +139,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File _tools/host-shot.ps1 -Full
 bash _tools/market-verify.sh cyber
 
 # 目录
-python market/crawl_topic.py --merge    # 需要 GITHUB_TOKEN
+python market/overrides.py              # 只校验覆写层（字段名 / 空白语义）
+python market/crawl_topic.py --local-only   # 不联网：重建本仓库条目 + 重放覆写层
+python market/crawl_topic.py            # 全量重爬（需要 GITHUB_TOKEN）+ 重放覆写层
 python market/validate_catalog.py
 ```
+
+**审核 / 覆写 / 下架都写 `market/overrides.json`，不要改 `catalog.json`** ——
+后者是爬虫每小时全量重写的派生物。键是 `owner/repo:subpath`，字段省略或留空表示不覆写。
 
 改完样式或逻辑，**只改 `market/src/`**，`plugin-market/` 是生成物，别手改。
 

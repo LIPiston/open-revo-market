@@ -33,8 +33,10 @@ bash _tools/market-verify.sh cyber  # 验收闸（另跑 mono 主题），非 0 
 open-revo-market\
 ├── market\                     # 市场源码与目录链
 │   ├── src\                    #   market.js / market.css / index.template.html
-│   ├── catalog.json            #   策展目录（CI 每小时刷新）
-│   ├── crawl_topic.py          #   topic 爬虫
+│   ├── catalog.json            #   派生目录（CI 每小时重写，别手改）
+│   ├── overrides.json          #   人工覆写层（审核 / 覆写 / 下架，要改的是这里）
+│   ├── overrides.py            #   覆写层读写与校验
+│   ├── crawl_topic.py          #   topic 爬虫（末尾叠加覆写层）
 │   └── validate_catalog.py     #   目录校验
 ├── build_market.py             # 市场构建器（单文件产物 + 自检）
 ├── plugin-market\              # ★ 市场构建产物（入库，可直接装）

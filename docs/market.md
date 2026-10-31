@@ -41,15 +41,53 @@
 ## 3. 目录与发现机制
 
 ```
-别人给仓库打 topic ──► 爬虫（每小时 / 可手动）──► market/catalog.json ──► 市场页签
-                          ↑                                          │
-                    「实时发现」直接查 GitHub，不等爬虫 ◄──────────────┘
+别人给仓库打 topic ──► 爬虫（每小时 / 可手动）──► overrides.json 叠加 ──► catalog.json ──► 市场页签
+                          ↑                                                     │
+                    「实时发现」直接查 GitHub，不等爬虫 ◄───────────────────────┘
 ```
 
 * **快车道（零审核）**：给自己的插件仓库打上 topic `openrevo-plugin`，约一小时后自动收录，
   UI 上显著标注「未审核」。作者也可在本地立刻用【实时发现】看到。
-* **正典（已审核）**：往 `market/catalog.json` 提 PR，把 `unreviewed` 改成 `false`；
-  爬虫合并时会**保留**这个标记，不会翻回去。
+* **正典（已审核）**：往 `market/overrides.json` 提 PR，给该条目写 `"unreviewed": false`。
+
+**`catalog.json` 是纯派生物，改它没用。** 爬虫每轮按 topic 全量重抓，覆盖整份文件；
+人工判断一律写在 `market/overrides.json`，抓完之后无条件叠加。
+
+文件形状（键 = `owner/repo:subpath`，仓库根条目 subpath 留空）：
+
+```json
+{
+  "format": 1,
+  "plugins": {
+    "LIPiston/open-revo-market:plugin-market": { "unreviewed": false },
+    "xmsjx/openrevo-plugin-power": {
+      "unreviewed": false,
+      "description": "硬件遥测与风扇联动。",
+      "capabilities": ["telemetry:read", "fan:control"],
+      "sha256": "…"
+    },
+    "someone/broken-plugin": { "exclude": true }
+  }
+}
+```
+
+| 覆写里的值 | 结果 |
+|---|---|
+| 字段省略，或为 `null` / `""` | **不覆写**，保留爬虫这轮抓到的值 |
+| 其余任何值（含 `false` / `[]` / `{}`） | 直接覆盖 |
+| `"exclude": true` | 该条**不进目录**（下架 / 拉黑） |
+
+`[]` 不当空处理，是因为 `capabilities: []` 是「扫过、没检出能力」这个**结论**，
+当空丢掉就退化成 `null`（没扫过）—— 两者在 UI 上是不同的三态，不能混。
+
+**键用 `owner/repo:subpath`，不用 `id`**：作者改一次 manifest 里的 `id`，
+用 id 存键就会静默失配 —— 想改的那条没改上，而且不报错。
+字段名拼错、覆写 `repo`/`subpath`、`exclude` 写成非布尔，都会**直接报错**并让 CI 红。
+
+**代价（有意的）**：爬虫不再从上一份 `catalog.json` 继承任何字段。
+某轮网络抖动导致 `manifest.json` 没抓到，那一轮的 `target_slot` / `permissions` 等
+会如实变成 `null`，下一轮抓到了再自己回来。需要「无论抓到什么都保持这个值」的字段，
+就写进覆写层固定它 —— 那是人工决策，不该由「上次碰巧抓到了」来冒充。
 
 作者约定：
 
@@ -128,10 +166,12 @@
 |---|---|
 | `market/src/` | 源码：`market.js` + `market.css` + `index.template.html`（**只改这里**） |
 | `build_market.py` | 把三者内联成**单文件** `plugin-market/index.html`，并做产物自检；`--check` / `--install` |
-| `market/catalog.json` | 策展目录（构建时内联为离线兜底 `SEED`） |
-| `market/crawl_topic.py` | 爬 GitHub topic → 生成 / 合并目录（`--dry-run` / `--merge` / `--out`） |
+| `market/catalog.json` | 派生的目录（构建时内联为离线兜底 `SEED`），**不要手改** |
+| `market/overrides.json` | **人工覆写层**：审核标记、字段覆写、`sha256`、下架 |
+| `market/overrides.py` | 覆写层读写与校验（字段白名单、空白语义、排除） |
+| `market/crawl_topic.py` | 爬 GitHub topic → 生成目录，再叠加覆写层（`--dry-run` / `--local-only` / `--out` / `--overrides`） |
 | `market/validate_catalog.py` | 目录结构校验 E1–E15，CI 与本地共用 |
-| `.github/workflows/refresh-catalog.yml` | 每小时自动爬一次，**只在内容变化时**提交 |
+| `.github/workflows/refresh-catalog.yml` | 每小时自动爬一次并叠加覆写层，**只在内容变化时**提交 |
 | `plugin-market/` | 构建产物（已入库） |
 | `_tools/install-market.ps1` | 一条命令安装（在线拉取现成产物 / `-Local` / `-From` / `-DryRun`） |
 | `_tools/market-{preview.html,verify.sh,shots.sh}` | 等价宿主环境预览 + 验收闸 + 出图 |
