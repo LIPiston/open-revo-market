@@ -53,11 +53,21 @@ const CALLS = [];
 const MOCK_ERRORS = [];
 const INSTALL_ARGS = [];
 const UNINSTALL_ARGS = [];
+// 启停与伴随服务：市场只发幂等动作，宿主持有真实状态。
+const ENABLE_ARGS = [];
+const SERVICE_CALLS = [];
+let SERVICE_RUNNING = false;
 // ?host=old 模拟没有安装接口的宿主：get_plugin_host_capabilities 直接 reject。
 // 默认模拟能力齐全的宿主：安装/卸载/重载都返回成功。
 const HOST_MODE = params.get('host') || 'new';
+// ?installed=a,b：把额外 id 也标成「已安装」，用于验证生命周期块。
+// 合成目录里的条目要在宿主侧也「已装」，卡片才会渲染启停按钮。
+const INSTALLED_EXTRA = (params.get('installed') || '').split(',').filter(Boolean);
+// ?service=0：宿主能力位里 can_manage_service 为 false，服务按钮必须 disabled。
+const CAN_MANAGE_SERVICE = params.get('service') !== '0';
 const INSTALLED = [
   { id: 'plugin-market', plugin_type: 'tab', enabled: true },
+  ...INSTALLED_EXTRA.map((id) => ({ id, plugin_type: 'service', enabled: true })),
 ];
 
 /** 从 codeload 地址推出解压后的归档根目录名：`<repo>-<branch>`（`/` 换成 `-`）。
@@ -89,7 +99,7 @@ window.__TAURI_INTERNALS__ = {
         host_version: '0.10.0', tauri_version: '2.0.0',
         can_install: true, can_uninstall: true, can_reload: true,
         can_open_url: true, can_write_clipboard: true,
-        can_read_manifest: true, can_manage_service: true,
+        can_read_manifest: true, can_manage_service: CAN_MANAGE_SERVICE,
       };
     }
     if (cmd === 'get_custom_plugins') return INSTALLED;
@@ -152,6 +162,57 @@ window.__TAURI_INTERNALS__ = {
           'command uninstall_plugin missing required key id');
       }
       UNINSTALL_ARGS.push(a);
+      return true;
+    }
+    // 启停：真宿主两条命令并存，字段名不同（`id` / `pluginId`）。
+    // 市场先发 unified、只在「字段名不对」时回退 —— mock 用同一口径卡字段名，
+    // 否则「传错字段名但宿主宽容」的假象会一直藏着。
+    if (cmd === 'set_plugin_enabled_unified') {
+      const a = args || {};
+      if (!a.id) {
+        MOCK_ERRORS.push('set_plugin_enabled_unified 缺 id');
+        throw new Error('invalid args `id` for command `set_plugin_enabled_unified`: ' +
+          'command set_plugin_enabled_unified missing required key id');
+      }
+      if (typeof a.enabled !== 'boolean') {
+        MOCK_ERRORS.push('set_plugin_enabled_unified 缺 enabled');
+        throw new Error('invalid args `enabled` for command `set_plugin_enabled_unified`: ' +
+          'command set_plugin_enabled_unified missing required key enabled');
+      }
+      ENABLE_ARGS.push(a);
+      return true;
+    }
+    if (cmd === 'set_custom_plugin_enabled') {
+      const a = args || {};
+      if (!a.pluginId) {
+        MOCK_ERRORS.push('set_custom_plugin_enabled 缺 pluginId');
+        throw new Error('invalid args `pluginId` for command `set_custom_plugin_enabled`: ' +
+          'command set_custom_plugin_enabled missing required key pluginId');
+      }
+      ENABLE_ARGS.push({ via: 'set_custom_plugin_enabled', ...a });
+      return true;
+    }
+    // 服务：真实状态在宿主侧，mock 只维护一个布尔，好断言 restart = stop + start。
+    if (cmd === 'get_plugin_service_status') {
+      const a = args || {};
+      if (!a.id) {
+        MOCK_ERRORS.push('get_plugin_service_status 缺 id');
+        throw new Error('invalid args `id` for command `get_plugin_service_status`: ' +
+          'command get_plugin_service_status missing required key id');
+      }
+      return SERVICE_RUNNING
+        ? { id: a.id, pid: 4242, detail: 'mock 服务' }
+        : { id: a.id, pid: null, detail: '' };
+    }
+    if (cmd === 'start_plugin_service' || cmd === 'stop_plugin_service') {
+      const a = args || {};
+      if (!a.id) {
+        MOCK_ERRORS.push(cmd + ' 缺 id');
+        throw new Error('invalid args `id` for command `' + cmd + '`: ' +
+          'command ' + cmd + ' missing required key id');
+      }
+      SERVICE_CALLS.push({ cmd, id: a.id });
+      SERVICE_RUNNING = cmd === 'start_plugin_service';
       return true;
     }
     if (cmd === 'get_plugin_manifest') {
@@ -239,6 +300,22 @@ function snapshot() {
     installedBadges: d.querySelectorAll('.mkt-badge.ok').length,
     unreviewed: d.querySelectorAll('.mkt-badge.warn').length,
     filterLabels: Array.from(d.querySelectorAll('.mkt-src')).map((b) => b.textContent.trim()).join(' | '),
+    // 筛选按钮的 key 与各自计数：形态专项验收要断言「service/shell/driver 按钮存在且计数=1」，
+    // 只比中文标签拼串会在文案改动后悄悄失效。
+    filters: Array.from(d.querySelectorAll('.mkt-src')).map((b) => {
+      const n = b.querySelector('.n');
+      return { key: b.getAttribute('data-filter'), n: n ? Number(n.textContent.trim()) : null };
+    }),
+    // 卡片上出现过的形态徽标类名（type-*），用来断言新形态的配色规则真的被用上
+    badgeTypes: Array.from(d.querySelectorAll('.mkt-badge[class*="type-"]'))
+      .map((b) => (String(b.className).match(/type-[a-z]+/) || [])[0])
+      .filter(Boolean),
+    // 披露块文本与全部徽标文本：验收要断言「卡片上真的写出了 target_slot / 当前过低」，
+    // 只断言 DOM 里存在某个类名的话，文案改了也验不出来。
+    discText: Array.from(d.querySelectorAll('.mkt-disc'))
+      .map((e) => e.textContent.replace(/\s+/g, ' ').trim()).join(' || '),
+    badgeTexts: Array.from(d.querySelectorAll('.mkt-badge'))
+      .map((e) => e.textContent.replace(/\s+/g, ' ').trim()),
     firstCard: (d.querySelector('.mkt-card-name') || {}).textContent || null,
     meta: (d.querySelector('.mkt-meta') || {}).textContent || null,
     footer: (d.querySelector('.mkt-footer') || {}).textContent || null,
@@ -427,6 +504,76 @@ async function exerciseUninstall() {
   };
 }
 
+/** 生命周期演练：点【停用】【启用】，断言真的发出了带 `enabled` 布尔值的 IPC。
+ *  只断言「按钮存在」是不够的 —— 按钮画了但没接线，用户点了没反应，
+ *  而市场自己 catch 了异常，光看 errors 也发现不了。 */
+async function exerciseLifecycle() {
+  const w = f.contentWindow;
+  const d = w.document;
+  const dis = d.querySelector('[data-act="disable"]');
+  const en = d.querySelector('[data-act="enable"]');
+  if (!dis || !en) return { lifecycle: 'no button' };
+
+  const before = ENABLE_ARGS.length;
+  const errBefore = MOCK_ERRORS.length;
+  dis.click();
+  await new Promise((r) => setTimeout(r, 400));
+  const afterDisable = ENABLE_ARGS.slice(before);
+
+  const before2 = ENABLE_ARGS.length;
+  d.querySelector('[data-act="enable"]') && d.querySelector('[data-act="enable"]').click();
+  await new Promise((r) => setTimeout(r, 400));
+  const afterEnable = ENABLE_ARGS.slice(before2);
+
+  const svcStart = d.querySelector('[data-act="service-start"]');
+  const svcStop = d.querySelector('[data-act="service-stop"]');
+  const statusEl = d.querySelector('[data-svc-status]');
+  return {
+    lifecycle: 'clicked',
+    disableArgs: afterDisable,
+    enableArgs: afterEnable,
+    // 无 service 声明的条目不该画服务按钮；有声明但宿主没开放能力时必须是 disabled
+    hasServiceBtns: !!(svcStart && svcStop),
+    serviceDisabled: !!(svcStart && svcStart.disabled),
+    statusText: statusEl ? statusEl.textContent.trim() : null,
+    mockErrors: MOCK_ERRORS.slice(errBefore),
+  };
+}
+
+/** 服务启停演练：只在合成目录带 `service` 的那一轮跑。 */
+async function exerciseService() {
+  const w = f.contentWindow;
+  const d = w.document;
+  const start = d.querySelector('[data-act="service-start"]');
+  const stop = d.querySelector('[data-act="service-stop"]');
+  if (!start || !stop) return { service: 'no button' };
+  if (start.disabled) {
+    return {
+      service: 'disabled',
+      statusText: (d.querySelector('[data-svc-status]') || {}).textContent || null,
+    };
+  }
+
+  const before = SERVICE_CALLS.length;
+  start.click();
+  await new Promise((r) => setTimeout(r, 500));
+  const afterStart = SERVICE_CALLS.slice(before);
+  const statusAfterStart = (d.querySelector('[data-svc-status]') || {}).textContent || null;
+
+  stop.click();
+  await new Promise((r) => setTimeout(r, 500));
+  const statusAfterStop = (d.querySelector('[data-svc-status]') || {}).textContent || null;
+
+  return {
+    service: 'clicked',
+    calls: SERVICE_CALLS.slice(before),
+    afterStart,
+    statusAfterStart: statusAfterStart && statusAfterStart.trim(),
+    statusAfterStop: statusAfterStop && statusAfterStop.trim(),
+    mockErrors: MOCK_ERRORS.slice(),
+  };
+}
+
 // ?modal=1：自动打开安装弹窗，供出图
 if (params.get('modal') === '1') {
   setTimeout(() => { try { exerciseInstall(); } catch (_) {} }, 2600);
@@ -455,6 +602,10 @@ setTimeout(async () => {
   try { install = await exerciseInstall(); } catch (e) { install = { install: 'threw: ' + e.message }; }
   let uninst = null;
   try { uninst = await exerciseUninstall(); } catch (e) { uninst = { uninstall: 'threw: ' + e.message }; }
+  let life = null;
+  try { life = await exerciseLifecycle(); } catch (e) { life = { lifecycle: 'threw: ' + e.message }; }
+  let svc = null;
+  try { svc = await exerciseService(); } catch (e) { svc = { service: 'threw: ' + e.message }; }
   let live = null;
   try { live = await exerciseLive(); } catch (e) { live = { live: 'threw: ' + e.message }; }
   // 翻页演练放在最后：它会切页，会影响前面截图的卡片计数
@@ -494,9 +645,12 @@ setTimeout(async () => {
   diag.className = ok ? 'ok' : 'err';
   diag.textContent = JSON.stringify({
     host: HOST_MODE, ready: s.ready, cards: s.cards, errors, install, uninstall: uninst, live, paging,
+    lifecycle: life, service: svc,
     scroll: s.scroll, pager: s.pager,
     calls: [...new Set(CALLS.map(c => c[0]))], sources: s.sources, badges: s.badges,
     installedBadges: s.installedBadges, filterLabels: s.filterLabels,
+    filters: s.filters, badgeTypes: s.badgeTypes,
+    discText: s.discText, badgeTexts: s.badgeTexts,
     meta: (s.meta || '').replace(/\s+/g, ' ').trim(),
     theme: s.theme, parentTheme: s.parentTheme, badgeColor: s.badgeColor,
     badgeSat: sat === null ? null : Number(sat.toFixed(3)), themeOk,

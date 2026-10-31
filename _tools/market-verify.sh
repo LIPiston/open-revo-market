@@ -79,6 +79,18 @@ catalog_path = sys.argv[3]
 SKIP_UNINSTALL = bool(sys.argv[4]) if len(sys.argv) > 4 else False
 EXTRA_QUERY = sys.argv[5] if len(sys.argv) > 5 else ''
 EXPECT_PROXY = 'proxy=1' in EXTRA_QUERY
+# types=1：这一轮用的是合成目录（service / shell / driver 各一条），
+# 要断言三个新形态的筛选按钮与徽标配色真的接上了。
+EXPECT_TYPES = 'types=1' in EXTRA_QUERY
+# disc=1：这一轮合成一条 slot（带 target_slot）与两条 min_host_version
+# （一条高于宿主 → 当前过低，一条低于宿主 → 中性），专验披露与兼容徽章。
+EXPECT_DISC = 'disc=1' in EXTRA_QUERY
+# compat=1：同一轮里还断言 min_host_version 的两个分支（当前过低 / 满足）。
+EXPECT_COMPAT = 'compat=1' in EXTRA_QUERY
+# lifecycle=1：这一轮把目录里的条目标成「已装」，专验启用/停用与伴随服务两组按钮。
+EXPECT_LIFECYCLE = 'lifecycle=1' in EXTRA_QUERY
+# lifecycle=1&service=0：宿主没开放服务管理能力，服务按钮必须 disabled。
+EXPECT_NO_SERVICE_CAP = 'lifecycle=1' in EXTRA_QUERY and 'service=0' in EXTRA_QUERY
 m = re.search(r'<pre id="diag"[^>]*>(.*?)</pre>', d, re.S)
 if not m:
     print("diag: NOT FOUND —— 预览页没跑起来"); sys.exit(2)
@@ -208,6 +220,111 @@ else:
     scroll_ok = True
     paging_ok = pag.get('paging') in (None, 'no pager')
 
+# 形态专项：合成目录里 service / shell / driver 各一条时，三个筛选按钮都得出现、
+# 计数都为 1，且卡片上真的用了对应的徽标类名（否则配色规则写对了也没被引用）。
+if EXPECT_TYPES:
+    fmap = {f.get('key'): f.get('n') for f in (j.get('filters') or [])}
+    seen = set(j.get('badgeTypes') or [])
+    missing_btn = [t for t in ('service', 'shell', 'driver') if fmap.get(t) != 1]
+    missing_badge = [t for t in ('service', 'shell', 'driver') if f'type-{t}' not in seen]
+    types_ok = not missing_btn and not missing_badge
+    print("types: filters=", fmap, " badges=", sorted(t for t in seen if t))
+    if missing_btn:
+        print("缺少筛选按钮或计数不为 1：", missing_btn)
+    if missing_badge:
+        print("卡片缺少形态徽标类名：", missing_badge)
+else:
+    types_ok = True
+
+# 披露专项：合成目录里 slot 条目带 target_slot，卡片上必须真的写出它。
+# 只断言 DOM 有 .mkt-disc 太弱 —— 披露块存在但内容是空的也照样"有"。
+if EXPECT_DISC:
+    disc = j.get('discText') or ''
+    # 断言的是**给人看的中文标签**与值，而不是字段名：UI 展示「挂载插槽」比
+    # 直接印 target_slot 更好读，把断言写成字段名等于把实现细节钉死。
+    want_bits = ['挂载插槽', 'power.hardware_limit', '54px']
+    missing = [b for b in want_bits if b not in disc]
+    disc_ok = not missing
+    print("disc: 含", want_bits, "→", "OK" if disc_ok else f"缺 {missing}")
+    if not disc_ok:
+        print("实际披露文本：", disc[:400])
+else:
+    disc_ok = True
+
+# 兼容性专项：两条合成条目，min_host_version 高于/低于宿主版本。
+#   low  → 需宿主 ≥ 0.0.1，宿主 0.10.0 满足 ⇒ 徽标出现但**不得**含「当前过低」
+#   high → 需宿主 ≥ 99.0.0，不满足 ⇒ 徽标必须含「当前过低」
+#   bad  → min_host_version 非法（目录不该有，但远端可能写进来）⇒ 任何徽标都不该出现
+if EXPECT_COMPAT:
+    texts = [t for t in (j.get('badgeTexts') or []) if '需宿主' in t]
+    joined = ' | '.join(texts)
+    low_ok = any('0.0.1' in t and '当前过低' not in t for t in texts)
+    high_ok = any('99.0.0' in t and '当前过低' in t for t in texts)
+    bad_ok = not any('BADVER' in t for t in texts)
+    compat_ok = low_ok and high_ok and bad_ok
+    print(f"compat: low_ok={low_ok} high_ok={high_ok} bad_ok={bad_ok} badges={joined[:200]}")
+    if not compat_ok:
+        print("兼容性徽标不符合预期：", texts)
+else:
+    compat_ok = True
+
+# 生命周期专项：合成目录把条目都标成「已装」，专验两组按钮真的接上了线上。
+#   启用/停用 → 必须发出 set_plugin_enabled_unified（字段 id + 布尔 enabled），
+#                且 enabled 的取值要跟着按钮走（停用 false、启用 true）。
+#   伴随服务 → 有 service 声明才画按钮；can_manage_service=false 时必须 disabled。
+# 只断言「按钮存在」不够：按钮画了但没接线时市场自己 catch 了异常，errors 里看不到。
+life = j.get('lifecycle') or {}
+svc = j.get('service') or {}
+if EXPECT_LIFECYCLE:
+    dis_args = (life.get('disableArgs') or [])
+    en_args = (life.get('enableArgs') or [])
+    # 停用那一发：字段名必须是 id，enabled 必须是 False（不是字符串 'false'）
+    dis_ok = any(
+        a.get('id') and a.get('enabled') is False and not a.get('pluginId')
+        and a.get('via') is None
+        for a in dis_args
+    )
+    en_ok = any(
+        a.get('id') and a.get('enabled') is True and not a.get('pluginId')
+        and a.get('via') is None
+        for a in en_args
+    )
+    life_ok = dis_ok and en_ok and not (life.get('mockErrors') or [])
+    if EXPECT_NO_SERVICE_CAP:
+        # 能力缺失时按钮要画出来但 disabled —— 藏起来等于骗用户「宿主支持」。
+        # 同时**一条服务类 IPC 都不许发**：旧宿主上 get_plugin_service_status 本身
+        # 就会报错，那行字会变成「无法查询：command not found」，
+        # 把「宿主没这个功能」误报成「查询失败」。
+        svc_calls = [c for c in (j.get('calls') or [])
+                     if c in ('get_plugin_service_status',
+                              'start_plugin_service', 'stop_plugin_service')]
+        cap_gate_ok = bool(life.get('hasServiceBtns')) and bool(life.get('serviceDisabled')) \
+            and svc.get('service') == 'disabled' and not svc_calls
+        if not cap_gate_ok:
+            print("服务能力缺失时的处理不符合预期：", {
+                'hasServiceBtns': life.get('hasServiceBtns'),
+                'serviceDisabled': life.get('serviceDisabled'),
+                'service': svc.get('service'),
+                '误发的服务 IPC': svc_calls,
+            })
+    else:
+        # 能力齐全时点了【启动服务】必须真发 IPC，状态文字要转成有内容的一行
+        cap_gate_ok = (
+            bool((svc.get('afterStart') or []))
+            and svc.get('service') == 'clicked'
+            and bool(svc.get('statusAfterStart'))
+            and not (svc.get('mockErrors') or [])
+        )
+        if not cap_gate_ok:
+            print("服务启停不符合预期：", svc)
+    life_ok = life_ok and cap_gate_ok
+    print(f"lifecycle: dis_ok={dis_ok} en_ok={en_ok} cap_gate_ok={cap_gate_ok} "
+          f"status={svc.get('statusAfterStart')!r}")
+    if not dis_ok or not en_ok:
+        print("启停 IPC 不符合预期：disable=", dis_args, " enable=", en_args)
+else:
+    life_ok = True
+
 fail = (
     not j.get('ready')
     or j.get('cards', 0) != want_cards
@@ -219,9 +336,14 @@ fail = (
     or live.get('live') != 'clicked'
     # mono 下徽标必须去饱和；cyber 下不强求（themeOk 默认 True）
     or not j.get('themeOk')
+    or not types_ok
+    or not disc_ok
+    or not compat_ok
+    or not life_ok
 )
 print(f"install_ok={install_ok} uninstall_ok={uninstall_ok} "
-      f"scroll_ok={scroll_ok} paging_ok={paging_ok}")
+      f"scroll_ok={scroll_ok} paging_ok={paging_ok} types_ok={types_ok} "
+      f"disc_ok={disc_ok} compat_ok={compat_ok} life_ok={life_ok}")
 print("RESULT:", "FAIL" if fail else "PASS")
 sys.exit(1 if fail else 0)
 PY
@@ -255,6 +377,88 @@ PY
 echo "=== 分页/滚动专项（30 条，每页 12）==="
 run_one new "../_shots/_big-catalog.json" "$BIG" "-paged" "skip-uninstall" || rc=1
 rm -f "$BIG" "$OUT/market-$THEME-new-paged.png" "$OUT/market-$THEME-new-paged.dom.html"
+
+# 第三条闸：合成目录只放 service / shell / driver 各一条，专验新增形态的筛选与配色。
+# 真实目录里现在没有这三种形态的插件，不合成的话「筛选按钮画了没接线」
+# 与「徽标配色写了没引用」都验不出来。合成的目录只落在 _shots/，不进 market/catalog.json。
+TYPES="$ROOT/_shots/_type-catalog.json"
+python - "$ROOT/market/catalog.json" "$TYPES" <<'PY'
+import json, sys
+cat = json.load(open(sys.argv[1], encoding='utf-8'))
+base = dict(cat['plugins'][0])
+out = dict(cat)
+out['plugins'] = [
+    dict(base, id='synth-service', name='合成无头服务', plugin_type='service',
+         repo='example/synth-service', subpath='', sha256=None),
+    dict(base, id='synth-shell', name='合成完整外壳', plugin_type='shell',
+         repo='example/synth-shell', subpath='', sha256=None),
+    dict(base, id='synth-driver', name='合成硬件驱动', plugin_type='driver',
+         repo='example/synth-driver', subpath='', sha256=None),
+]
+json.dump(out, open(sys.argv[2], 'w', encoding='utf-8'), ensure_ascii=False)
+PY
+echo "=== 形态筛选专项（service / shell / driver）==="
+run_one new "../_shots/_type-catalog.json" "$TYPES" "-types" "skip-uninstall" "types=1" || rc=1
+rm -f "$TYPES" "$OUT/market-$THEME-new-types.png" "$OUT/market-$THEME-new-types.dom.html"
+
+# 第四条闸：披露 + 兼容性徽章。合成目录放一条 slot（带 target_slot / slot_height）
+# 与三条 min_host_version 不同的条目，专验「披露文本真的写出来了」与徽章两个分支。
+# 合成条目只落在 _shots/，不进 market/catalog.json。
+DISC="$ROOT/_shots/_disc-catalog.json"
+python - "$ROOT/market/catalog.json" "$DISC" <<'PY'
+import json, sys
+cat = json.load(open(sys.argv[1], encoding='utf-8'))
+base = dict(cat['plugins'][0])
+out = dict(cat)
+out['plugins'] = [
+    dict(base, id='synth-slot', name='合成微插槽', plugin_type='slot',
+         repo='example/synth-slot', subpath='', sha256=None,
+         target_slot='power.hardware_limit', slot_height='54px',
+         entry='index.html', permissions=['power:control']),
+    dict(base, id='synth-low', name='合成低版本要求', plugin_type='tab',
+         repo='example/synth-low', subpath='', sha256=None,
+         min_host_version='0.0.1'),
+    dict(base, id='synth-high', name='合成高版本要求', plugin_type='tab',
+         repo='example/synth-high', subpath='', sha256=None,
+         min_host_version='99.0.0'),
+    dict(base, id='synth-bad', name='合成非法版本要求', plugin_type='tab',
+         repo='example/synth-bad', subpath='', sha256=None,
+         min_host_version='BADVER'),
+]
+json.dump(out, open(sys.argv[2], 'w', encoding='utf-8'), ensure_ascii=False)
+PY
+echo "=== 披露/兼容性专项（slot 披露 + 版本过低两分支）==="
+run_one new "../_shots/_disc-catalog.json" "$DISC" "-disc" "skip-uninstall" "disc=1&compat=1" || rc=1
+rm -f "$DISC" "$OUT/market-$THEME-new-disc.png" "$OUT/market-$THEME-new-disc.dom.html"
+
+# 第五条闸：生命周期（启用/停用 + 伴随服务）。
+# 目录里放一条带 `service` 声明的条目，并用 ?installed= 把它标成已装 ——
+# 只有已装插件的卡片才会渲染启停按钮，否则这两组按钮永远测不到。
+LIFE="$ROOT/_shots/_life-catalog.json"
+python - "$ROOT/market/catalog.json" "$LIFE" <<'PY'
+import json, sys
+cat = json.load(open(sys.argv[1], encoding='utf-8'))
+base = dict(cat['plugins'][0])
+out = dict(cat)
+out['plugins'] = [
+    dict(base, id='synth-life', name='合成有服务插件', plugin_type='service',
+         repo='example/synth-life', subpath='', sha256=None,
+         service={'executable': 'synth-life.exe', 'auto_start': True}),
+]
+json.dump(out, open(sys.argv[2], 'w', encoding='utf-8'), ensure_ascii=False)
+PY
+echo "=== 生命周期专项（启用/停用 + 服务启停）==="
+run_one new "../_shots/_life-catalog.json" "$LIFE" "-life" "" \
+  "lifecycle=1&installed=synth-life" || rc=1
+rm -f "$OUT/market-$THEME-new-life.png" "$OUT/market-$THEME-new-life.dom.html"
+
+# 第六条闸：宿主没有 can_manage_service 时，服务按钮必须 disabled 而不是消失。
+# 「藏起来」会让用户以为宿主支持，点不了才发现 —— 与卸载按钮同一口径。
+# 目录沿用上一条的 $LIFE（此时还没删），只换宿主能力位。
+echo "=== 服务能力缺失专项（?service=0）==="
+run_one new "../_shots/_life-catalog.json" "$LIFE" "-nocap" "" \
+  "lifecycle=1&service=0&installed=synth-life" || rc=1
+rm -f "$LIFE" "$OUT/market-$THEME-new-nocap.png" "$OUT/market-$THEME-new-nocap.dom.html"
 
 if [ "$rc" -eq 0 ]; then echo "ALL PASS ($THEME)"; else echo "FAILED ($THEME)"; fi
 exit "$rc"

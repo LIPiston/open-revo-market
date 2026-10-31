@@ -1,0 +1,32 @@
+{
+  "id": "eva01-core",
+  "name": "EVA-01 初号机 S2 能量核心",
+  "version": "1.0.0",
+  "author": "LIPiston",
+  "description": "异形拟态机甲桌宠挂件：结温脉冲呼吸、风扇转速联动，点一下核心切换全速强冷。",
+  "plugin_type": "widget",
+  "entry": "index.html",
+  "window": {
+    "width": 260,
+    "height": 180,
+    "transparent": true,
+    "always_on_top": true,
+    "resizable": false,
+    "skip_taskbar": true
+  },
+  "telemetry": {
+    "enabled": true,
+    "desired_interval_ms": 1500,
+    "sensors": [
+      "cpu_temp",
+      "cpu_fan_rpm",
+      "power_mode",
+      "fan_boost"
+    ]
+  },
+  "permissions": [
+    "telemetry:read",
+    "fan:control"
+  ],
+  "min_host_version": "0.9.3"
+}

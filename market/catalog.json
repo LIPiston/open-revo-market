@@ -2,8 +2,96 @@
   "format": 1,
   "generatedAt": "2026-10-22T07:31:42+00:00",
   "topic": "openrevo-plugin",
-  "count": 2,
+  "count": 4,
   "plugins": [
+    {
+      "id": "battery-hardware-limit",
+      "name": "锁定充电上限",
+      "version": "1.0.0",
+      "author": "LIPiston",
+      "plugin_type": "slot",
+      "description": "激活底层 EC 平台门控以真实生效 60%/80% 硬件限电（实验功能）。",
+      "repo": "LIPiston/open-revo-market",
+      "subpath": "battery-hardware-limit",
+      "branch": "main",
+      "commit": null,
+      "stars": null,
+      "updatedAt": null,
+      "license": null,
+      "unreviewed": false,
+      "capabilities": null,
+      "topics": [
+        "openrevo-plugin"
+      ],
+      "homepage": null,
+      "entry": "index.html",
+      "target_slot": "power.hardware_limit",
+      "slot_height": "36px",
+      "min_host_version": "0.9.3",
+      "permissions": [
+        "power:control"
+      ],
+      "service": null,
+      "shortcuts": null,
+      "watchers": null,
+      "window": null,
+      "telemetry": null,
+      "theme_css": null,
+      "background_css": null,
+      "image": null
+    },
+    {
+      "id": "eva01-core",
+      "name": "EVA-01 初号机 S2 能量核心",
+      "version": "1.0.0",
+      "author": "LIPiston",
+      "plugin_type": "widget",
+      "description": "异形拟态机甲桌宠挂件：结温脉冲呼吸、风扇转速联动，点一下核心切换全速强冷。",
+      "repo": "LIPiston/open-revo-market",
+      "subpath": "eva01-core",
+      "branch": "main",
+      "commit": null,
+      "stars": null,
+      "updatedAt": null,
+      "license": null,
+      "unreviewed": false,
+      "capabilities": null,
+      "topics": [
+        "openrevo-plugin"
+      ],
+      "homepage": null,
+      "entry": "index.html",
+      "target_slot": null,
+      "slot_height": null,
+      "min_host_version": "0.9.3",
+      "permissions": [
+        "telemetry:read",
+        "fan:control"
+      ],
+      "service": null,
+      "shortcuts": null,
+      "watchers": null,
+      "window": {
+        "width": 260,
+        "height": 180,
+        "transparent": true,
+        "always_on_top": true,
+        "resizable": false,
+        "skip_taskbar": true
+      },
+      "telemetry": {
+        "enabled": true,
+        "sensors": [
+          "cpu_temp",
+          "cpu_fan_rpm",
+          "power_mode",
+          "fan_boost"
+        ]
+      },
+      "theme_css": null,
+      "background_css": null,
+      "image": null
+    },
     {
       "id": "plugin-market",
       "name": "插件市场",
@@ -23,7 +111,20 @@
       "topics": [
         "openrevo-plugin"
       ],
-      "homepage": null
+      "homepage": null,
+      "entry": "index.html",
+      "target_slot": null,
+      "slot_height": null,
+      "min_host_version": null,
+      "permissions": null,
+      "service": null,
+      "shortcuts": null,
+      "watchers": null,
+      "window": null,
+      "telemetry": null,
+      "theme_css": null,
+      "background_css": null,
+      "image": null
     },
     {
       "id": "openrevo-plugin-power",

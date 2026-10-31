@@ -145,6 +145,165 @@ def detect_subpaths(repo: str, branch: str, token: str | None, max_probe: int = 
     return out
 
 
+SEMVER3 = re.compile(r"^\d+\.\d+\.\d+$")
+
+
+def _nonempty_str(v) -> str | None:
+    """非空字符串，其余（含纯空白）一律 None。"""
+    return v if isinstance(v, str) and v.strip() else None
+
+
+def sanitize_min_host_version(v) -> str | None:
+    """三段数字 SemVer 才算数；`>=0.9.3`、`^0.9` 这类范围表达式不属于本字段语义。"""
+    s = _nonempty_str(v)
+    return s if s and SEMVER3.match(s) else None
+
+
+def sanitize_permissions(v) -> list[str] | None:
+    """字符串数组或 None。非字符串元素丢弃，不替换成空串。"""
+    if not isinstance(v, list):
+        return None
+    return [x for x in v if isinstance(x, str) and x.strip()]
+
+
+def sanitize_service(v) -> dict | None:
+    """伴随服务声明。`executable` 是宿主唯一强制的字段，缺它整块作废。
+
+    `args` 永不写入目录 —— 它可能带端口口令或本机路径，而宿主结构里也没有该字段。
+    """
+    if not isinstance(v, dict):
+        return None
+    exe = _nonempty_str(v.get("executable"))
+    if not exe:
+        return None
+    out: dict = {"executable": exe}
+    for k in ("elevated", "auto_start", "auto_stop"):
+        if isinstance(v.get(k), bool):
+            out[k] = v[k]
+    health = _nonempty_str(v.get("health_url"))
+    if health:
+        out["health_url"] = health
+    port = v.get("port")
+    if isinstance(port, int) and not isinstance(port, bool) and port > 0:
+        out["port"] = port
+    desc = _nonempty_str(v.get("description"))
+    if desc:
+        out["description"] = desc
+    return out
+
+
+def sanitize_shortcuts(v) -> list[dict] | None:
+    """只保留可展示的最小面：id / name / combo。动作载荷不进目录。"""
+    if not isinstance(v, list):
+        return None
+    out: list[dict] = []
+    for it in v:
+        if not isinstance(it, dict):
+            continue
+        sid = _nonempty_str(it.get("id"))
+        if not sid:
+            continue
+        row = {"id": sid}
+        for k in ("name", "combo"):
+            s = _nonempty_str(it.get(k))
+            if s:
+                row[k] = s
+        out.append(row)
+    return out or None
+
+
+def sanitize_watchers(v) -> list[dict] | None:
+    """只保留 id / name / 条件类型。条件类型缺失就不写 when，不猜。"""
+    if not isinstance(v, list):
+        return None
+    out: list[dict] = []
+    for it in v:
+        if not isinstance(it, dict):
+            continue
+        wid = _nonempty_str(it.get("id"))
+        if not wid:
+            continue
+        row = {"id": wid}
+        name = _nonempty_str(it.get("name"))
+        if name:
+            row["name"] = name
+        when = it.get("when")
+        if isinstance(when, dict):
+            wtype = _nonempty_str(when.get("type"))
+            if wtype:
+                row["when"] = wtype
+        out.append(row)
+    return out or None
+
+
+def sanitize_window(v) -> dict | None:
+    if not isinstance(v, dict):
+        return None
+    out: dict = {}
+    for k in ("width", "height"):
+        x = v.get(k)
+        if isinstance(x, int) and not isinstance(x, bool) and x > 0:
+            out[k] = x
+    # 宿主同时接受 snake_case 与手册里的 camelCase 写法，这里统一收成 snake_case
+    for name, keys in (
+        ("transparent", ("transparent",)),
+        ("always_on_top", ("always_on_top", "alwaysOnTop")),
+        ("resizable", ("resizable",)),
+        ("decorations", ("decorations",)),
+        ("skip_taskbar", ("skip_taskbar", "skipTaskbar")),
+    ):
+        for k in keys:
+            if isinstance(v.get(k), bool):
+                out[name] = v[k]
+                break
+    return out or None
+
+
+def sanitize_telemetry(v) -> dict | None:
+    """`enabled` 是清单自述（宿主不校验），按声明原样记录，不改写含义。"""
+    if not isinstance(v, dict):
+        return None
+    out: dict = {}
+    if isinstance(v.get("enabled"), bool):
+        out["enabled"] = v["enabled"]
+    sensors = v.get("sensors")
+    if isinstance(sensors, list):
+        kept = [x for x in sensors if isinstance(x, str) and x.strip()]
+        if kept:
+            out["sensors"] = kept
+    return out or None
+
+
+def extract_manifest_fields(manifest: dict | None) -> dict:
+    """从 manifest 抽取形态专属字段，供目录条目携带。
+
+    取舍：**形状不合法一律收敛为 null**。这是「丢弃无法理解的声明」，不是编造值 ——
+    远端作者写错一个字段不该让本仓库的目录校验变红。
+    """
+    m = manifest if isinstance(manifest, dict) else {}
+    existing = m.get("watchers")
+    rules = existing if existing is not None else m.get("rules")
+    return {
+        "entry": _nonempty_str(m.get("entry")),
+        "target_slot": _nonempty_str(m.get("target_slot")) or _nonempty_str(m.get("slot")),
+        "slot_height": _nonempty_str(m.get("slot_height")) or _nonempty_str(m.get("slotHeight")),
+        "min_host_version": (
+            sanitize_min_host_version(m.get("min_host_version"))
+            or sanitize_min_host_version(m.get("min_version"))
+            or sanitize_min_host_version(m.get("openrevo_version"))
+        ),
+        "permissions": sanitize_permissions(m.get("permissions")),
+        "service": sanitize_service(m.get("service")),
+        "shortcuts": sanitize_shortcuts(m.get("shortcuts")),
+        "watchers": sanitize_watchers(rules),
+        "window": sanitize_window(m.get("window")),
+        "telemetry": sanitize_telemetry(m.get("telemetry")),
+        "theme_css": _nonempty_str(m.get("theme_css")),
+        "background_css": _nonempty_str(m.get("background_css")),
+        "image": _nonempty_str(m.get("image")) or _nonempty_str(m.get("wallpaper")),
+    }
+
+
 def build_entry(
     repo_meta: dict,
     token: str | None,
@@ -190,6 +349,8 @@ def build_entry(
         "topics": repo_meta.get("topics") or [],
         "homepage": repo_meta.get("homepage") or None,
     }
+    # 形态专属字段：合规的照抄，形状不合法一律 null（见 extract_manifest_fields）
+    entry.update(extract_manifest_fields(manifest))
 
     if entry["plugin_type"] not in KNOWN_TYPES:
         # 未知类型不拒（宿主自己也是原样显示），但记下来便于人工看
@@ -236,15 +397,18 @@ def local_entries() -> list[dict]:
             "repo": REPO,
             "subpath": d.name,
             "branch": "main",
+            # 仓库侧事实（commit / stars / updatedAt / license）本地扫描读不到：
+            # 留 null 由 crawl() 或 --local-only 的合并步骤沿用上次真实抓取的值。
             "commit": None,
             "stars": None,
             "updatedAt": None,
-            "license": "MIT",
+            "license": None,
             "unreviewed": False,      # 与目录同源同审
             "capabilities": None,     # 仍未做静态扫描 —— 三态里的"未扫描"
             "topics": [TOPIC],
             "homepage": None,
         })
+        out[-1].update(extract_manifest_fields(m))
     return out
 
 
@@ -348,16 +512,77 @@ def merge(prev: dict, fresh: dict) -> dict:
     return fresh
 
 
+def local_only_catalog(out: Path) -> dict | None:
+    """跳过网络，只重建本仓库自带的插件条目，与现有目录合并。
+
+    用途：本仓库新增/修改自己的插件时刷新目录，不需要 GITHUB_TOKEN、也不依赖
+    远端 topic 搜索是否成功。远端条目**原样保留** —— 这里不假装重新抓过它们，
+    `generatedAt` 也不改动：它记录的是上一次真实全量抓取的时间。
+    """
+    if not out.exists():
+        log(f"找不到现有目录 {out}，--local-only 需要一个基线")
+        return None
+    try:
+        prev = json.loads(out.read_text(encoding="utf-8"))
+    except Exception as e:  # noqa: BLE001
+        log(f"现有目录解析失败：{e}")
+        return None
+
+    prev_by_key = {f"{p.get('repo')}:{p.get('subpath', '')}": p for p in (prev.get("plugins") or [])}
+    local = {f"{e['repo']}:{e['subpath']}": e for e in local_entries()}
+    # 本地扫描读不到仓库侧事实：同一条目沿用上次真实抓取的值，
+    # 否则一次 --local-only 就会把「可定位到某个 commit」悄悄降级成「只知道分支」。
+    for key, e in local.items():
+        old = prev_by_key.get(key)
+        if not old:
+            continue
+        for f in ("commit", "stars", "updatedAt", "license"):
+            if e.get(f) is None and old.get(f) is not None:
+                e[f] = old[f]
+    # 远端条目原样保留；本仓库的条目以本地 manifest 为准（可新增、可更新）
+    kept = [p for key, p in prev_by_key.items() if key not in local]
+    final = kept + list(local.values())
+    final = sorted(final, key=lambda e: (e.get("unreviewed", True), -(e.get("stars") or 0), e["repo"]))
+
+    return {
+        "format": prev.get("format", 1),
+        "generatedAt": prev.get("generatedAt"),
+        "topic": prev.get("topic", TOPIC),
+        "count": len(final),
+        "plugins": final,
+    }
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="抓取 openrevo-plugin topic 生成市场目录")
     ap.add_argument("--dry-run", action="store_true", help="只打印统计，不写文件")
     ap.add_argument("--merge", action="store_true", help="与现有 catalog.json 合并")
     ap.add_argument("--out", default=str(CATALOG), help="输出路径")
+    ap.add_argument(
+        "--local-only",
+        action="store_true",
+        help="跳过网络，只重建本仓库自带插件条目并与现有目录合并",
+    )
     args = ap.parse_args()
 
     token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
     if not token:
         log("警告：没有 GITHUB_TOKEN，未认证限额 60 次/小时，很可能中途被限速")
+
+    if args.local_only:
+        fresh = local_only_catalog(Path(args.out))
+        if fresh is None:
+            return 1
+        log(f"共 {fresh['count']} 条：")
+        for p in fresh["plugins"]:
+            log(f"  {p['plugin_type']:12s} {p['repo']}:{p.get('subpath','')}")
+        Path(args.out).write_text(
+            json.dumps(fresh, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+            newline="\n",
+        )
+        log(f"已写入 {args.out}")
+        return 0
 
     try:
         fresh = crawl(token)

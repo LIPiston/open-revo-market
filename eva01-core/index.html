@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EVA-01 S2 能量核心</title>
+  <style>
+    /* Design Tokens 优先取宿主注入值，取不到才用暗色基准兜底 —— 这样 mono 主题下也整体去饱和 */
+    :root {
+      --surface-card: rgba(22, 27, 34, 0.75);
+      --surface-pill: rgba(255, 255, 255, 0.05);
+      --border-subtle: rgba(255, 255, 255, 0.08);
+      --border-medium: rgba(255, 255, 255, 0.15);
+      --text-primary: #f8fafc;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+      --status-ok: #10b981;
+      --status-warn: #f59e0b;
+      --status-error: #ef4444;
+      --radius-md: 8px;
+      --radius-lg: 12px;
+      --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+      /* 结温驱动的辉光色，由脚本按温度改写 */
+      --glow: #38bdf8;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+
+    html,
+    body {
+      height: 100%;
+      background: transparent;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 6px;
+    }
+
+    /* 机体：拖拽入口。只在 pointerdown 里起拖，避免与按钮点击抢事件 */
+    #core {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      border-radius: var(--radius-lg);
+      background: var(--surface-card);
+      border: 1px solid var(--border-subtle);
+      backdrop-filter: blur(16px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+      color: var(--text-primary);
+      cursor: grab;
+      overflow: hidden;
+      transition: border-color var(--transition-fast);
+    }
+
+    #core:hover {
+      border-color: var(--border-medium);
+    }
+
+    #core:active {
+      cursor: grabbing;
+    }
+
+    /* 呼吸环：结温越高脉动越快、越亮 */
+    .halo {
+      position: absolute;
+      width: 128px;
+      height: 128px;
+      border-radius: 50%;
+      border: 2px solid var(--glow);
+      box-shadow: 0 0 20px var(--glow), inset 0 0 18px color-mix(in srgb, var(--glow) 35%, transparent);
+      opacity: 0.55;
+      pointer-events: none;
+      animation: breathe 3.6s ease-in-out infinite;
+    }
+
+    @keyframes breathe {
+      0%, 100% { transform: scale(1); opacity: 0.4; }
+      50%      { transform: scale(1.06); opacity: 0.85; }
+    }
+
+    .label {
+      font-size: 9.5px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      z-index: 1;
+    }
+
+    .temp {
+      font-size: 40px;
+      font-weight: 900;
+      line-height: 1;
+      font-variant-numeric: tabular-nums;
+      color: var(--glow);
+      text-shadow: 0 0 16px color-mix(in srgb, var(--glow) 45%, transparent);
+      z-index: 1;
+      transition: color var(--transition-fast);
+    }
+
+    .temp-unit {
+      font-size: 16px;
+      font-weight: 700;
+      vertical-align: super;
+    }
+
+    .readouts {
+      display: flex;
+      gap: 10px;
+      z-index: 1;
+      font-size: 10px;
+      color: var(--text-muted);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .readouts b {
+      color: var(--text-primary);
+      font-weight: 700;
+    }
+
+    /* 强冷开关：与拖拽分离，点击不会误拖 */
+    #boost {
+      z-index: 2;
+      margin-top: 4px;
+      padding: 3px 12px;
+      border-radius: 9999px;
+      border: 1px solid var(--border-medium);
+      background: var(--surface-pill);
+      color: var(--text-muted);
+      font-size: 10px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: color var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast);
+    }
+
+    #boost:hover {
+      color: var(--text-primary);
+    }
+
+    #boost[data-on="true"] {
+      color: var(--status-ok);
+      border-color: var(--status-ok);
+      background: color-mix(in srgb, var(--status-ok) 14%, transparent);
+    }
+
+    /* 遥测拿不到时明确说「未连接」，不假装有数据 */
+    #core[data-live="false"] .halo {
+      border-style: dashed;
+      animation: none;
+      opacity: 0.3;
+    }
+
+    #core[data-live="false"] .temp {
+      color: var(--text-dim);
+      text-shadow: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="core" data-live="false" title="按住拖拽移动 · 结温越高呼吸越快">
+    <div class="halo"></div>
+    <span class="label">S² 能量核心</span>
+    <span class="temp"><span id="temp">--</span><span class="temp-unit">℃</span></span>
+    <div class="readouts">
+      <span><b id="fan">--</b> RPM</span>
+      <span>模式 <b id="mode">--</b></span>
+    </div>
+    <button id="boost" type="button" data-on="false">强冷</button>
+  </div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      var core = document.getElementById('core');
+      var halo = core.querySelector('.halo');
+      var tempEl = document.getElementById('temp');
+      var fanEl = document.getElementById('fan');
+      var modeEl = document.getElementById('mode');
+      var boostBtn = document.getElementById('boost');
+
+      // 宿主的 widget 引导脚本会给出 __TAURI__；tab/slot 形态拿不到时退回父窗口桥。
+      function invoke(cmd, args) {
+        if (window.__TAURI__ && window.__TAURI__.core && typeof window.__TAURI__.core.invoke === 'function') {
+          return window.__TAURI__.core.invoke(cmd, args);
+        }
+        var p = window.parent;
+        if (p && p.__OPENREVO_BRIDGE__ && typeof p.__OPENREVO_BRIDGE__.invoke === 'function') {
+          return p.__OPENREVO_BRIDGE__.invoke(cmd, args);
+        }
+        return Promise.reject(new Error('宿主桥不可用'));
+      }
+
+      function listen(event, handler) {
+        if (window.__TAURI__ && window.__TAURI__.event && typeof window.__TAURI__.event.listen === 'function') {
+          return window.__TAURI__.event.listen(event, handler);
+        }
+        var p = window.parent;
+        if (p && p.__OPENREVO_BRIDGE__ && typeof p.__OPENREVO_BRIDGE__.listen === 'function') {
+          return p.__OPENREVO_BRIDGE__.listen(event, handler);
+        }
+        return Promise.reject(new Error('宿主事件桥不可用'));
+      }
+
+      function paintTemp(temp) {
+        if (typeof temp !== 'number' || !isFinite(temp)) return;
+        tempEl.textContent = Math.round(temp);
+        // 60℃ 以下冷静天蓝，68℃ 起琥珀，80℃ 起猩红 —— 与宿主状态色语义一致
+        var glow = temp >= 80 ? 'var(--status-error)' : (temp >= 68 ? 'var(--status-warn)' : '#38bdf8');
+        core.style.setProperty('--glow', glow);
+        // 呼吸周期从 3.6s 压到 1.2s，温度越高越急促
+        var dur = Math.max(1.2, 3.6 - (temp - 40) * 0.06);
+        halo.style.animationDuration = dur.toFixed(2) + 's';
+        core.dataset.live = 'true';
+      }
+
+      function paintFan(rpm) {
+        if (typeof rpm === 'number' && isFinite(rpm)) fanEl.textContent = Math.round(rpm);
+      }
+
+      function paintMode(mode) {
+        if (mode === null || mode === undefined || mode === '') return;
+        var label = { 1: '办公', 2: '均衡', 3: '性能', 4: '狂暴' }[mode];
+        modeEl.textContent = label || String(mode);
+      }
+
+      function paintBoost(on) {
+        boostBtn.dataset.on = on ? 'true' : 'false';
+        boostBtn.textContent = on ? '强冷运行中' : '强冷';
+      }
+
+      // 硬件状态流：宿主按清单里声明的 desired_interval_ms 广播
+      listen('hardware-state-updated', function (e) {
+        var d = (e && e.payload) || {};
+        paintTemp(d.cpu_temp);
+        paintFan(d.cpu_fan_rpm);
+        paintMode(d.power_mode);
+        if (typeof d.fan_boost === 'boolean') paintBoost(d.fan_boost);
+      }).catch(function () {
+        // 拿不到事件桥就保持 data-live="false"，界面明确显示未连接
+      });
+
+      listen('fan-boost-changed', function (e) {
+        paintBoost(!!(e && e.payload));
+      }).catch(function () {});
+
+      // 首屏补一次当前值：事件流只广播变化后的状态
+      invoke('get_power_settings').then(function (info) {
+        if (!info) return;
+        if (typeof info.fan_boost === 'boolean') paintBoost(info.fan_boost);
+        paintMode(info.power_mode);
+      }).catch(function () {});
+
+      var busy = false;
+      boostBtn.addEventListener('click', function () {
+        if (busy) return;
+        busy = true;
+        var next = boostBtn.dataset.on !== 'true';
+        invoke('set_fan_boost', { enable: next }).then(function () {
+          paintBoost(next);
+        }).catch(function (err) {
+          console.warn('set_fan_boost 失败', err);
+        }).then(function () {
+          busy = false;
+        });
+      });
+
+      // 拖拽：pointerdown 单一入口（不混用 data-tauri-drag-region）
+      core.addEventListener('pointerdown', function (e) {
+        if (e.button !== 0) return;
+        var wv = null;
+        try {
+          if (window.__TAURI__ && window.__TAURI__.webviewWindow) {
+            wv = window.__TAURI__.webviewWindow.getCurrentWebviewWindow();
+          } else if (window.__TAURI__ && window.__TAURI__.window) {
+            wv = window.__TAURI__.window.getCurrentWindow();
+          }
+        } catch (err) {
+          wv = null;
+        }
+        if (wv && typeof wv.startDragging === 'function') {
+          wv.startDragging().catch(function () {});
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

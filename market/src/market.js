@@ -123,6 +123,10 @@ const state = {
   // 只有显式为 true 的能力才允许在 UI 上承诺，绝不按版本号猜。
   caps: null,
   busy: null,            // 正在安装/卸载的 entry.id，用于禁用按钮
+  // 伴随服务的**查询结果**。宿主不返回「开关态」，只返回 pid/detail，
+  // 所以这里存的是「查到了什么」，不是「插件是开还是关」。
+  serviceStatus: {},     // id -> { running, pid, detail, error? }
+  servicePending: {},    // id -> true：查询在途，防止每帧重发
   // 一键安装是否走 gh-proxy。默认关：宿主是否接受非 github.com 域名未实测，
   // 但国内直连 codeload 常常失败，所以给用户一个显式开关。
   useProxy: false,
@@ -301,6 +305,23 @@ function writeCache(payload) {
   } catch (_) { /* 配额满或隐私模式，忽略 */ }
 }
 
+/** 非空字符串，否则 null。目录里的形态字段只有「写对了」和「没写」两种状态。 */
+function strOrNull(v) {
+  return typeof v === 'string' && v.trim() ? v : null;
+}
+
+/** 正整数（bool 是 int 的子类，得单独挡掉）。 */
+function posIntOrNull(v) {
+  return typeof v === 'number' && Number.isInteger(v) && v > 0 ? v : null;
+}
+
+/** 清单里带 id 的对象数组：缺 id 的元素直接丢弃，不猜。 */
+function idRowsOrNull(v) {
+  if (!Array.isArray(v)) return null;
+  const out = v.filter((it) => it && typeof it === 'object' && strOrNull(it.id));
+  return out.length ? out : null;
+}
+
 function normalizeCatalog(raw, source) {
   const plugins = (raw.plugins || []).map((p) => ({
     id: p.id || (p.repo || '').replace('/', '__'),
@@ -321,6 +342,35 @@ function normalizeCatalog(raw, source) {
     unreviewed: p.unreviewed !== false,
     capabilities: Array.isArray(p.capabilities) ? p.capabilities : (p.capabilities === null ? null : undefined),
     topics: p.topics || [],
+    // 形态专属清单字段：缺失与形状非法都收敛为 null，UI 据此「没声明就不展示」。
+    entry: strOrNull(p.entry),
+    target_slot: strOrNull(p.target_slot),
+    slot_height: strOrNull(p.slot_height),
+    min_host_version: strOrNull(p.min_host_version),
+    theme_css: strOrNull(p.theme_css),
+    background_css: strOrNull(p.background_css),
+    image: strOrNull(p.image),
+    permissions: Array.isArray(p.permissions)
+      ? (p.permissions.filter((x) => strOrNull(x)).length ? p.permissions.filter((x) => strOrNull(x)) : [])
+      : null,
+    service: (function (s) {
+      if (!s || typeof s !== 'object' || Array.isArray(s)) return null;
+      const exe = strOrNull(s.executable);
+      if (!exe) return null;
+      return {
+        executable: exe,
+        elevated: typeof s.elevated === 'boolean' ? s.elevated : null,
+        auto_start: typeof s.auto_start === 'boolean' ? s.auto_start : null,
+        auto_stop: typeof s.auto_stop === 'boolean' ? s.auto_stop : null,
+        health_url: strOrNull(s.health_url),
+        port: posIntOrNull(s.port),
+        description: strOrNull(s.description),
+      };
+    })(p.service),
+    shortcuts: idRowsOrNull(p.shortcuts),
+    watchers: idRowsOrNull(p.watchers),
+    window: (p.window && typeof p.window === 'object' && !Array.isArray(p.window)) ? p.window : null,
+    telemetry: (p.telemetry && typeof p.telemetry === 'object' && !Array.isArray(p.telemetry)) ? p.telemetry : null,
   }));
   return {
     format: raw.format || 1,
@@ -585,6 +635,68 @@ async function uninstallEntry(entry) {
   }
 }
 
+/** 启用 / 停用。`get_custom_plugins` 不返回 `enabled`，所以市场**不知道**当前态，
+ *  只提供两个幂等动作，成功后 toast 也只说「已发送」，不断言当前状态。
+ *  exe 里两条命令并存：`set_plugin_enabled_unified`（字段 `id`）与
+ *  `set_custom_plugin_enabled`（字段 `pluginId`），前者优先、失败再回退后者。 */
+async function setEnabled(entry, enabled) {
+  state.busy = entry.id;
+  render();
+  try {
+    const payload = { id: entry.id, enabled };
+    try {
+      await hostInvoke('set_plugin_enabled_unified', payload);
+    } catch (e) {
+      if (!/missing required key|invalid args/i.test(String((e && e.message) || e))) throw e;
+      await hostInvoke('set_custom_plugin_enabled', { pluginId: entry.id, enabled });
+    }
+    await reloadPlugins(true);
+    await refreshInstalled();
+    toast(`已发送${enabled ? '启用' : '停用'}请求：${entry.id}`);
+  } finally {
+    state.busy = null;
+    render();
+  }
+}
+
+/** 伴随服务状态。只读 `pid` 与 `detail` —— 其余字段未在 exe 里逐字确认，
+ *  读了就是在编造宿主行为。`pid` 存在且非空即认为在跑。 */
+async function serviceStatus(entry) {
+  try {
+    const s = await hostInvoke('get_plugin_service_status', { id: entry.id });
+    const pid = s && s.pid;
+    const running = pid !== null && pid !== undefined && pid !== '';
+    const detail = s && typeof s.detail === 'string' ? s.detail : '';
+    return { running, pid: running ? pid : null, detail };
+  } catch (e) {
+    return { running: false, pid: null, detail: '', error: shortErr(e) };
+  }
+}
+
+/** 服务的启动 / 停止。重启只能 stop + start —— exe 里没有 `restart_plugin_service`。 */
+async function controlService(entry, action) {
+  if (!canManageService()) throw new Error('本版宿主没有开放服务管理接口');
+  state.busy = entry.id;
+  render();
+  try {
+    await hostInvoke(action === 'start' ? 'start_plugin_service' : 'stop_plugin_service', { id: entry.id });
+    const st = await serviceStatus(entry);
+    state.serviceStatus = state.serviceStatus || {};
+    state.serviceStatus[entry.id] = st;
+    toast(st.running ? `服务运行中${st.pid ? `（PID ${st.pid}）` : ''}` : '服务已停止');
+    render();
+  } finally {
+    state.busy = null;
+    render();
+  }
+}
+
+/** 生命周期按钮由 render 重建，点击处的 promise 不该飘成未捕获拒绝 ——
+ *  失败只弹 toast（卸载弹窗里是同样的写法，这里因为无确认框才需要一个统一出口）。 */
+function runLifecycle(p) {
+  Promise.resolve(p).catch((e) => toast('操作失败：' + shortErr(e), true));
+}
+
 /** 重扫插件目录。宿主支持就发 IPC；不支持则退回 get_custom_plugins（只读枚举）。 */
 async function reloadPlugins(silent) {
   if (state.caps && state.caps.can_reload === true) {
@@ -696,6 +808,126 @@ function badge(cls, text, icon) {
   return `<span class="mkt-badge ${cls}">${icon || ''}${esc(text)}</span>`;
 }
 
+/** 三段数字 SemVer 比较。任一侧解析不出就返回 null —— 调用方据此不渲染徽章，
+ *  而不是猜一个版本关系出来。只比 major.minor.patch，预发布标签不收。 */
+function cmpSemver(a, b) {
+  const pa = /^(\d+)\.(\d+)\.(\d+)$/.exec(String(a || '').trim());
+  const pb = /^(\d+)\.(\d+)\.(\d+)$/.exec(String(b || '').trim());
+  if (!pa || !pb) return null;
+  for (let i = 1; i <= 3; i += 1) {
+    const x = Number(pa[i]);
+    const y = Number(pb[i]);
+    if (x !== y) return x < y ? -1 : 1;
+  }
+  return 0;
+}
+
+/** 兼容性徽章：两侧版本都可解析时才渲染。比不出来就不显示 —— 沉默好过猜。 */
+function compatBadge(entry) {
+  const need = entry.min_host_version;
+  if (!need) return '';
+  const have = state.caps && state.caps.host_version;
+  const r = cmpSemver(have, need);
+  if (r === null) return '';
+  if (r < 0) {
+    return badge('warn', `需宿主 ≥ ${need} · 当前过低`, I.alert);
+  }
+  return badge('', `需宿主 ≥ ${need}`, I.shield);
+}
+
+/** 清单声明的披露行。只列目录里真的有的字段，缺什么就不提什么。
+ *  `permissions` 一律写明「宿主不据此授权」—— 它只是清单自述。 */
+function manifestDisclosure(entry) {
+  const rows = [];
+  const t = entry.plugin_type;
+
+  if (entry.permissions && entry.permissions.length) {
+    rows.push({
+      label: '清单声明权限',
+      text: `${entry.permissions.join('、')}（清单自述，宿主不据此授权）`,
+    });
+  } else if (entry.permissions && entry.permissions.length === 0) {
+    rows.push({ label: '清单声明权限', text: '声明为空（清单自述，宿主不据此授权）' });
+  }
+
+  if (entry.shortcuts && entry.shortcuts.length) {
+    const combos = entry.shortcuts
+      .map((s) => `${s.name || s.id}${s.combo ? `（${s.combo}）` : ''}`)
+      .join('、');
+    rows.push({ label: `快捷键 ×${entry.shortcuts.length}`, text: combos });
+  }
+
+  if (entry.watchers && entry.watchers.length) {
+    rows.push({
+      label: `监听规则 ×${entry.watchers.length}`,
+      text: '由宿主内核调度，不需要插件自己轮询',
+    });
+  }
+
+  if (t === 'slot') {
+    if (entry.target_slot) rows.push({ label: '挂载插槽', text: entry.target_slot });
+    if (entry.slot_height) rows.push({ label: '插槽高度', text: entry.slot_height });
+  }
+
+  if (t === 'skin' && entry.theme_css) {
+    rows.push({ label: '样式表', text: entry.theme_css });
+  }
+
+  if (t === 'background') {
+    if (entry.background_css) rows.push({ label: '背景样式表', text: entry.background_css });
+    if (entry.image) rows.push({ label: '零代码壁纸', text: entry.image });
+  }
+
+  if ((t === 'widget' || t === 'tab' || t === 'shell' || t === 'slot') && entry.entry) {
+    rows.push({ label: '入口文件', text: entry.entry });
+  }
+
+  const win = entry.window;
+  if (win && (t === 'widget' || t === 'tab' || t === 'shell' || t === 'skin')) {
+    const geo = [];
+    if (win.width && win.height) geo.push(`${win.width}×${win.height}`);
+    if (win.transparent === true) geo.push('透明');
+    if (win.always_on_top === true) geo.push('置顶');
+    if (win.skip_taskbar === true) geo.push('跳过任务栏');
+    if (win.decorations === true) geo.push('原生标题栏');
+    if (win.resizable === true) geo.push('可缩放');
+    if (geo.length) rows.push({ label: '视窗', text: geo.join(' · ') });
+  }
+
+  const svc = entry.service;
+  if (svc) {
+    const bits = [svc.executable];
+    if (svc.elevated === true) bits.push('管理员提权');
+    else if (svc.elevated === false) bits.push('不提权');
+    if (svc.port) bits.push(`端口 ${svc.port}`);
+    if (svc.health_url) bits.push(`探活 ${svc.health_url}`);
+    if (svc.auto_start === true) bits.push('打开即启动');
+    if (svc.auto_stop === true) bits.push('关闭即停止');
+    rows.push({ label: '伴随服务', text: bits.join(' · ') });
+  }
+
+  const tel = entry.telemetry;
+  if (tel) {
+    if (tel.enabled === false) {
+      rows.push({ label: '遥测', text: '清单声明不启用遥测' });
+    } else if (Array.isArray(tel.sensors) && tel.sensors.length) {
+      rows.push({ label: '遥测传感器', text: tel.sensors.join('、') });
+    }
+  }
+
+  return rows;
+}
+
+/** 披露块：卡片与安装弹窗共用。没有任何可披露项时整块不渲染。 */
+function disclosureBlock(entry) {
+  const rows = manifestDisclosure(entry);
+  if (!rows.length) return '';
+  const items = rows
+    .map((r) => `<div class="mkt-disc-item info">${I.info}<span><b>${esc(r.label)}</b>：${esc(r.text)}</span></div>`)
+    .join('');
+  return `<div class="mkt-disc">${items}</div>`;
+}
+
 function capabilityBlock(entry) {
   const caps = entry.capabilities;
   let items;
@@ -721,6 +953,79 @@ function capabilityBlock(entry) {
   return `<div class="mkt-disc">${items}</div>`;
 }
 
+/** 宿主是否声明了服务管理能力。缺这条能力时**不发任何服务类 IPC** ——
+ *  旧宿主上 `get_plugin_service_status` 本身就会报错，那行字会变成
+ *  「无法查询：command not found」，把「宿主没这个功能」说成「查询失败」。 */
+function canManageService() {
+  return !!(state.caps && state.caps.can_manage_service === true);
+}
+
+/** 服务状态文字。**只写查到的**：没查过就说「未查询」，不猜。
+ *  查询是异步的，所以先渲染占位，结果回来只改那一行文字，不整页重渲染
+ *  （整页重渲染会打断正在输入搜索框的用户）。 */
+function serviceStatusText(entry) {
+  if (!canManageService()) return '宿主未开放服务管理';
+  const st = state.serviceStatus && state.serviceStatus[entry.id];
+  if (!st) return '状态未查询';
+  if (st.error) return `无法查询：${st.error}`;
+  const bits = [st.running ? '运行中' : '未运行'];
+  if (st.running && st.pid) bits.push(`PID ${st.pid}`);
+  if (st.detail) bits.push(st.detail);
+  return bits.join(' · ');
+}
+
+/** 懒查询一次服务状态：同一 id 只发一次，结果更新到已渲染的那一行。 */
+function ensureServiceStatus(entry) {
+  if (!canManageService()) return;
+  state.serviceStatus = state.serviceStatus || {};
+  state.servicePending = state.servicePending || {};
+  if (state.serviceStatus[entry.id] || state.servicePending[entry.id]) return;
+  state.servicePending[entry.id] = true;
+  serviceStatus(entry).then((st) => {
+    state.serviceStatus[entry.id] = st;
+    delete state.servicePending[entry.id];
+    const txt = serviceStatusText(entry);
+    document.querySelectorAll('[data-svc-status]').forEach((el) => {
+      if (el.getAttribute('data-svc-status') === entry.id) el.textContent = txt;
+    });
+  });
+}
+
+/** 生命周期块：只给已装插件。
+ *  启用/停用是**两个幂等动作**，不是开关 —— `get_custom_plugins` 不返回 `enabled`，
+ *  市场不知道当前态，画成 toggle 就是在撒谎。
+ *  服务块只在清单声明了 `service` 时出现；宿主没开放服务管理能力时按钮 disabled，
+ *  与「卸载」同一口径：能力缺失要看得见，不是把按钮藏起来。 */
+function lifecycleBlock(entry) {
+  const dis = state.busy ? 'disabled' : '';
+  const id = esc(entry.id);
+  let html = `
+    <div class="mkt-lifecycle">
+      <button class="mkt-btn sm" data-act="enable" data-id="${id}" ${dis}
+        title="让宿主重新加载该插件">${I.check}启用</button>
+      <button class="mkt-btn sm" data-act="disable" data-id="${id}" ${dis}
+        title="停用后插件不再被加载，文件保留">${I.x}停用</button>`;
+
+  if (entry.service) {
+    const can = canManageService();
+    const sdis = state.busy || !can ? 'disabled' : '';
+    const capTitle = can ? '' : '本版宿主没有开放服务管理接口';
+    ensureServiceStatus(entry);
+    html += `
+      <span class="spacer"></span>
+      <span class="mkt-lifecycle-svc">
+        <span class="dot${can ? '' : ' err'}"></span>
+        <span data-svc-status="${id}" title="${capTitle}">${esc(serviceStatusText(entry))}</span>
+        <button class="mkt-btn sm" data-act="service-start" data-id="${id}" ${sdis}
+          title="${capTitle || '启动伴随服务'}">启动服务</button>
+        <button class="mkt-btn sm" data-act="service-stop" data-id="${id}" ${sdis}
+          title="${capTitle || '停止伴随服务'}">停止服务</button>
+      </span>`;
+  }
+
+  return `${html}</div>`;
+}
+
 function card(entry) {
   const isInst = state.installed.has(entry.id);
   const isBusy = state.busy === entry.id;
@@ -737,7 +1042,11 @@ function card(entry) {
     upd ? badge('warn', '可更新', I.refresh) : '',
     entry.unreviewed ? badge('warn', '未审核', I.alert) : badge('info', '已审核', I.shield),
     entry.commit ? badge('', entry.commit.slice(0, 7)) : '',
-  ].filter(Boolean).join('');
+  ];
+  // 兼容性徽章只在两侧版本都能解析时出现；比不出来就不占位。
+  const compat = compatBadge(entry);
+  if (compat) badges.push(compat);
+  const badgeHtml = badges.filter(Boolean).join('');
 
   const desc = entry.description
     ? `<div class="mkt-card-desc">${esc(entry.description)}</div>`
@@ -758,9 +1067,11 @@ function card(entry) {
           <div class="mkt-card-id">${esc(entry.repo || entry.id)}${entry.subpath ? '/' + esc(entry.subpath) : ''}</div>
         </div>
       </div>
-      <div class="mkt-badges">${badges}</div>
+      <div class="mkt-badges">${badgeHtml}</div>
       ${desc}
+      ${disclosureBlock(entry)}
       ${capabilityBlock(entry)}
+      ${isInst ? lifecycleBlock(entry) : ''}
       <div class="mkt-card-foot">
         ${stars}
         <span class="mkt-card-stat">${esc(entry.author || '未知作者')}</span>
@@ -786,6 +1097,9 @@ function toolbar() {
     ['tab', TYPE_LABEL.tab, counts.tab || 0],
     ['widget', TYPE_LABEL.widget, counts.widget || 0],
     ['slot', TYPE_LABEL.slot, counts.slot || 0],
+    ['service', TYPE_LABEL.service, counts.service || 0],
+    ['shell', TYPE_LABEL.shell, counts.shell || 0],
+    ['driver', TYPE_LABEL.driver, counts.driver || 0],
     ['__installed__', '已安装', counts.__installed__],
     ['__unreviewed__', '未审核', counts.__unreviewed__],
   ].filter((f) => f[0] === 'all' || f[0] === '__installed__' || f[0] === '__unreviewed__' || f[2] > 0);
@@ -1005,6 +1319,10 @@ function bind() {
       // 用原生确认框装 = 点了没反应。
       if (act === 'install') openInstallModal(entry);
       else if (act === 'uninstall') openUninstallModal(entry);
+      else if (act === 'enable') runLifecycle(setEnabled(entry, true));
+      else if (act === 'disable') runLifecycle(setEnabled(entry, false));
+      else if (act === 'service-start') runLifecycle(controlService(entry, 'start'));
+      else if (act === 'service-stop') runLifecycle(controlService(entry, 'stop'));
     });
   });
 }
@@ -1106,7 +1424,14 @@ function openInstallModal(entry) {
           ${entry.commit ? badge('info', 'commit ' + entry.commit.slice(0, 10)) : badge('', branch)}
           ${entry.unreviewed ? badge('warn', '未审核', I.alert) : badge('info', '已审核', I.shield)}
           ${isInst ? badge('ok', '已安装 · 将被覆盖', I.check) : ''}
+          ${compatBadge(entry)}
         </div>
+
+        ${manifestDisclosure(entry).length ? `
+        <div class="mkt-block">
+          <div class="h">清单声明</div>
+          ${disclosureBlock(entry)}
+        </div>` : ''}
 
         ${oneClick ? `
         <div class="mkt-note plain">

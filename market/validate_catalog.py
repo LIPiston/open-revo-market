@@ -16,6 +16,12 @@
   E10 commit 形状    —— 有 commit 时必须是 40 位 hex
   E11 sha256 形状    —— 有 sha256 时必须是 64 位 hex（会透传给宿主做完整性校验）
   E12 作者归属      —— author 必须等于 repo 的 owner（manifest 里的自填 author 不作数）
+  E13 形态字段形状  —— entry/target_slot/slot_height/theme_css/background_css/image
+                        只能是非空字符串或 null；permissions 只能是字符串数组或 null；
+                        service 只能是对象或 null（executable 必填，port 若在须为正整数）；
+                        shortcuts/watchers 只能是数组或 null（元素必须带 id）
+  E14 最低宿主版本  —— min_host_version 只接受三段数字 SemVer 或 null
+  E15 slot 声明     —— plugin_type 为 slot 时必须给出 target_slot
 
 用法：
     python market/validate_catalog.py [catalog.json]
@@ -37,6 +43,7 @@ REQUIRED = ("id", "name", "repo", "plugin_type", "description", "capabilities", 
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
 HEX64 = re.compile(r"^[0-9a-f]{64}$")
 REPO_RE = re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
+SEMVER3 = re.compile(r"^\d+\.\d+\.\d+$")
 
 
 def validate(path: Path) -> list[str]:
@@ -134,6 +141,56 @@ def validate(path: Path) -> list[str]:
             author = p.get("author")
             if not isinstance(author, str) or author.casefold() != owner.casefold():
                 errs.append(f"{where}: E12 author 必须等于仓库归属者 {owner!r}，得到 {author!r}")
+
+        # E13 这些字段是给 UI 直接读的形态信息：要么是非空字符串，要么是显式的 null。
+        # 缺字段按「没声明」放行（老条目没有这些字段），但写了就得写对。
+        for f in ("entry", "target_slot", "slot_height", "theme_css", "background_css", "image"):
+            v = p.get(f)
+            if v is not None and not (isinstance(v, str) and v.strip()):
+                errs.append(f"{where}: E13 {f} 必须是非空字符串或 null，得到 {v!r}")
+
+        perms = p.get("permissions")
+        if perms is not None:
+            if not isinstance(perms, list):
+                errs.append(f"{where}: E13 permissions 必须是字符串数组或 null，得到 {perms!r}")
+            elif any(not isinstance(x, str) or not x.strip() for x in perms):
+                errs.append(f"{where}: E13 permissions 元素必须是非空字符串，得到 {perms!r}")
+
+        svc = p.get("service")
+        if svc is not None:
+            if not isinstance(svc, dict):
+                errs.append(f"{where}: E13 service 必须是对象或 null，得到 {svc!r}")
+            else:
+                exe = svc.get("executable")
+                if not (isinstance(exe, str) and exe.strip()):
+                    errs.append(f"{where}: E13 service.executable 必须是非空字符串，得到 {exe!r}")
+                port = svc.get("port")
+                # bool 是 int 的子类，得单独挡掉 True/False
+                if port is not None and (isinstance(port, bool) or not isinstance(port, int) or port <= 0):
+                    errs.append(f"{where}: E13 service.port 必须为正整数或 null，得到 {port!r}")
+
+        for f in ("shortcuts", "watchers"):
+            items = p.get(f)
+            if items is None:
+                continue
+            if not isinstance(items, list):
+                errs.append(f"{where}: E13 {f} 必须是数组或 null，得到 {items!r}")
+                continue
+            for j, it in enumerate(items):
+                if not isinstance(it, dict) or not (isinstance(it.get("id"), str) and it["id"].strip()):
+                    errs.append(f"{where}: E13 {f}[{j}] 必须带非空字符串 id，得到 {it!r}")
+
+        # E14 只认三段数字。范围表达式（>=0.9.3）、两段、v 前缀、预发布后缀一律视为
+        # 说不清最低版本 —— 由爬虫收敛成 null，这里挡住手改目录时写进去的糊涂值。
+        mhv = p.get("min_host_version")
+        if mhv is not None and not (isinstance(mhv, str) and SEMVER3.match(mhv)):
+            errs.append(f"{where}: E14 min_host_version 必须是三段数字 SemVer 或 null，得到 {mhv!r}")
+
+        # E15 slot 插件靠 target_slot 决定插在哪，缺了就是装上也看不见。
+        if ptype == "slot":
+            ts = p.get("target_slot")
+            if not (isinstance(ts, str) and ts.strip()):
+                errs.append(f"{where}: E15 plugin_type=slot 必须声明 target_slot，得到 {ts!r}")
 
     return errs
 

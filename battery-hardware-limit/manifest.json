@@ -1,0 +1,13 @@
+{
+  "id": "battery-hardware-limit",
+  "name": "锁定充电上限",
+  "version": "1.0.0",
+  "author": "LIPiston",
+  "description": "激活底层 EC 平台门控以真实生效 60%/80% 硬件限电（实验功能）。",
+  "plugin_type": "slot",
+  "target_slot": "power.hardware_limit",
+  "slot_height": "36px",
+  "entry": "index.html",
+  "permissions": ["power:control"],
+  "min_host_version": "0.9.3"
+}

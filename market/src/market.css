@@ -81,6 +81,9 @@ html[data-theme="mono"] .mkt-badge.type-background,
 html[data-theme="mono"] .mkt-badge.type-tab,
 html[data-theme="mono"] .mkt-badge.type-widget,
 html[data-theme="mono"] .mkt-badge.type-slot,
+html[data-theme="mono"] .mkt-badge.type-service,
+html[data-theme="mono"] .mkt-badge.type-shell,
+html[data-theme="mono"] .mkt-badge.type-driver,
 html[data-theme="mono"] .mkt-badge.ok,
 html[data-theme="mono"] .mkt-badge.warn,
 html[data-theme="mono"] .mkt-badge.info {
@@ -361,6 +364,9 @@ html[data-theme="mono"] .mkt-btn.danger {
 .mkt-badge.type-tab { color: #7dd3fc; background: #38bdf826; border-color: #38bdf84d; }
 .mkt-badge.type-widget { color: #6ee7b7; background: #10b98126; border-color: #10b9814d; }
 .mkt-badge.type-slot { color: #c4b5fd; background: #8b5cf626; border-color: #8b5cf64d; }
+.mkt-badge.type-service { color: #fda4af; background: #f43f5e26; border-color: #f43f5e4d; }
+.mkt-badge.type-shell { color: #5eead4; background: #14b8a626; border-color: #14b8a64d; }
+.mkt-badge.type-driver { color: #fdba74; background: #f9731626; border-color: #f973164d; }
 .mkt-badge.ok { color: var(--status-ok); background: var(--status-ok-dim); border-color: color-mix(in srgb, var(--status-ok) 35%, transparent); }
 .mkt-badge.warn { color: var(--status-warn); background: var(--status-warn-dim); border-color: color-mix(in srgb, var(--status-warn) 35%, transparent); }
 .mkt-badge.info { color: var(--status-info); background: var(--status-info-dim); border-color: color-mix(in srgb, var(--status-info) 35%, transparent); }
@@ -381,6 +387,41 @@ html[data-theme="mono"] .mkt-btn.danger {
 .mkt-card-stat { font-size: 10px; color: var(--text-dim); display: inline-flex; align-items: center; gap: 3px; }
 .mkt-card-stat svg { width: 10px; height: 10px; }
 .mkt-card-foot .spacer { flex: 1; }
+
+/* -------------------------------------------------------------- lifecycle */
+/* 已装插件才有这一行。启用/停用是两个按钮而不是开关：宿主不返回开关态，
+  画成 toggle 就等于替宿主断言一个市场并不知道的状态。 */
+.mkt-lifecycle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding-top: 7px;
+  border-top: 1px solid var(--border-subtle);
+}
+.mkt-lifecycle .spacer { flex: 1; min-width: 6px; }
+
+.mkt-lifecycle-svc {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  color: var(--text-dim);
+}
+.mkt-lifecycle-svc .dot {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--status-ok);
+  flex-shrink: 0;
+}
+/* 状态点只表达「查到了什么」：还没查出来时用暗色，查不到时用错误色。
+   它们不是绿/红两态的开关指示，所以不写 running/stopped。 */
+.mkt-lifecycle-svc .dot.err { background: var(--status-error); }
+.mkt-lifecycle-svc > span[data-svc-status] {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 /* -------------------------------------------------------------- disclosure */
 .mkt-disc { display: flex; flex-direction: column; gap: 4px; }
