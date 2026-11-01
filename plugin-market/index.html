@@ -1152,7 +1152,7 @@ html[data-theme="mono"] .mkt-toast.err { color: var(--text-primary); border-colo
  * OpenRevo 插件市场 · 应用逻辑
  * 由 build_market.py 内联进 plugin-market/index.html。
  *
- * 宿主约束（详见 docs/host-and-plugins.md）：
+ * 宿主约束（详见 docs/host-contract.md）：
  *  1. `tab` 插件跑在 `srcDoc` iframe（sandbox=allow-scripts allow-forms allow-same-origin），
  *     与宿主**同源** → 可访问 window.parent.__TAURI_INTERNALS__.invoke 与父文档 DOM。
  *  2. 该 iframe **没有** allow-downloads / allow-popups → 下载与 window.open 全部被拦，

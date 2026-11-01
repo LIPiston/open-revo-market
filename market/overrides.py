@@ -51,7 +51,10 @@ CATALOG_FIELDS = frozenset({
 IDENTITY_FIELDS = frozenset({"repo", "subpath"})
 
 # 不是条目字段、但允许出现在条目里的控制键。
-CONTROL_FIELDS = frozenset({"exclude"})
+# `review_note` 是审核者写给作者看的理由（为什么没进已审核 / 为什么下架）：
+# 它必须能写进覆写文件，但**不该**进 `catalog.json` —— 目录是给市场渲染的，
+# 备注不是目录数据。所以放在 CONTROL_FIELDS 而不是 CATALOG_FIELDS。
+CONTROL_FIELDS = frozenset({"exclude", "review_note"})
 
 TOP_LEVEL = frozenset({"format", "plugins", "_note"})
 
