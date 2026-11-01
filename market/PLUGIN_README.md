@@ -29,4 +29,8 @@ OpenRevo 主控台里的一个 `tab` 页签：浏览第三方插件、看能力�
 
 否则删掉 `%APPDATA%\OpenRevo\plugins\plugin-market` 整个文件夹，再回插件页点一次【刷新】。
 
+手动删目录的话，还要清掉 `%APPDATA%\OpenRevo\config.json` 里 `custom_plugin_toggles` 中残留的该插件 ID，否则会留下一条指向不存在目录的开关记录。
+
+> ⚠️ 改 `config.json` 前先备份。宿主运行中持有权威内存态、**会整份回写 config**，保险做法是「停 → 改 → 启」。
+
 > 只装你信任的来源。插件是第三方代码，**以你的权限运行**；本市场只做来源绑定与静态披露，不构成安全审计。

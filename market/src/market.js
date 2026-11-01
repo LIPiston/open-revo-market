@@ -962,14 +962,14 @@ function disclosureBlock(entry) {
 function capabilitySummary(entry) {
   const caps = entry.capabilities;
   if (caps === undefined || caps === null || entry.live) {
-    // 三态之一：没扫过。不能渲染成「未检出」。
-    return `<div class="mkt-cap quiet" title="该条目尚未做静态能力扫描，清单声明不代表实际行为">${I.info}<span><b>未扫描</b> · 清单不代表实际行为</span></div>`;
+    // 三态之一：没查过。不能渲染成「未检出」。
+    return `<div class="mkt-cap quiet" title="该条目尚未做能力审查，清单声明不代表实际行为">${I.info}<span><b>未扫描</b> · 清单不代表实际行为</span></div>`;
   }
   if (caps.length === 0) {
-    return `<div class="mkt-cap ok">${I.shield}<span><b>未检出</b> · 静态扫描未发现联网、文件写入等能力</span></div>`;
+    return `<div class="mkt-cap ok">${I.shield}<span><b>未检出</b> · 审查未发现联网、文件写入等能力</span></div>`;
   }
   const list = caps.map((c) => CAP_LABEL[c] || c).join('、');
-  return `<div class="mkt-cap warn">${I.alert}<span>静态扫描检出：<b>${esc(list)}</b></span></div>`;
+  return `<div class="mkt-cap warn">${I.alert}<span>检出能力：<b>${esc(list)}</b></span></div>`;
 }
 
 /** 危险组合只列命中的，逐条用扫描器的话写，不给总分、不做安全评分。 */
@@ -999,15 +999,15 @@ function capabilityBlock(entry) {
   let items;
 
   if (caps === undefined || entry.live) {
-    // 三态之一：没扫过。不能渲染成「未检出」。
-    items = `<div class="mkt-disc-item info">${I.info}<span><b>未扫描</b> —— 该条目尚未做静态能力扫描，下面的清单不代表实际行为。</span></div>`;
+    // 三态之一：没查过。不能渲染成「未检出」。
+    items = `<div class="mkt-disc-item info">${I.info}<span><b>未扫描</b> —— 该条目尚未做能力审查，下面的清单不代表实际行为。</span></div>`;
   } else if (caps === null) {
-    items = `<div class="mkt-disc-item info">${I.info}<span><b>未扫描</b> —— 尚未做静态能力扫描。</span></div>`;
+    items = `<div class="mkt-disc-item info">${I.info}<span><b>未扫描</b> —— 尚未做能力审查。</span></div>`;
   } else if (caps.length === 0) {
-    items = `<div class="mkt-disc-item">${I.shield}<span><b>未检出</b> —— 静态扫描未发现联网、文件写入等能力。</span></div>`;
+    items = `<div class="mkt-disc-item">${I.shield}<span><b>未检出</b> —— 审查未发现联网、文件写入等能力。</span></div>`;
   } else {
     const list = caps.map((c) => CAP_LABEL[c] || c).join('、');
-    items = `<div class="mkt-disc-item">${I.shield}<span>静态扫描检出：<b>${esc(list)}</b></span></div>`;
+    items = `<div class="mkt-disc-item">${I.shield}<span>检出能力：<b>${esc(list)}</b></span></div>`;
   }
 
   const risks = Array.isArray(caps)

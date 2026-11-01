@@ -34,6 +34,8 @@ python build_market.py --install  # 构建并装到 %APPDATA%\OpenRevo\plugins\p
 
 构建把三个源文件内联成**单文件** `plugin-market/index.html`，同时生成 `manifest.json`，并把 `market/PLUGIN_README.md` 复制成 `plugin-market/README.md`（装进用户插件目录给终端用户看）。
 
+**`market/catalog.json` 也会被整份内联进产物**，作为 `const SEED` —— 在线目录拉不到时的兜底数据。所以「市场里显示的兜底条目」是**上次构建时**的目录快照，不是当前的：改了 `catalog.json` 必须重新 `python build_market.py`，产物里的兜底才会跟着变。
+
 **产物必须单文件**：宿主用 `srcDoc` 注入，基准 URL 是宿主文档，任何 `<link rel=stylesheet>` / `<script src>` / `<img src="assets/…">` / `@import` 都会 404。构建期会断言零外部引用。
 
 `--check` 做的自检包括：零外部引用、占位符已替换、`market.js` 里没有硬编码宿主版本号（能力必须运行时探测）。
@@ -120,7 +122,7 @@ bash _tools/market-verify.sh mono
 
 默认跑**两种宿主 mock**（能力齐全 / 无安装 IPC）：
 
-- `ready` 为真，**卡片数精确等于本地 `market/catalog.json` 的条数**（不是「> 0」—— 否则「目录整个拉丢了」和「目录真的只有 1 条」看起来一样）；
+- `ready` 为真，**卡片数精确等于 `min(本地 catalog.json 条数, 12)`** —— 目录不超过一页时整份都要出现，超过一页时等于每页条数。写成「> 0」会让「目录整个拉丢了」和「目录真的只有 1 条」看起来一样；
 - **JS 错误为 0**；
 - 能力齐全：点【安装】→ 弹窗 → 点【立即安装】→ 真发 `install_plugin_from_url`，且 `usedNativeConfirm === false`（防止有人改回 `window.confirm`）；
 - 能力齐全：`uninstall_ok` —— `uninstall_plugin` 真被调用、参数是 `id` 且无 `pluginId`、弹窗关闭；

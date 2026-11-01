@@ -115,15 +115,24 @@ def load(path: Path) -> dict[str, dict]:
             raise OverrideError(f"{key}: 身份字段 {sorted(ident)} 不可覆写 —— 它们由键决定")
         if "exclude" in patch and not isinstance(patch["exclude"], bool):
             raise OverrideError(f"{key}: exclude 必须是布尔，得到 {patch['exclude']!r}")
+        if "review_note" in patch and not isinstance(patch["review_note"], str):
+            raise OverrideError(f"{key}: review_note 必须是字符串，得到 {patch['review_note']!r}")
 
         out[key] = patch
     return out
 
 
 def _check_key(key: str) -> None:
-    repo, _, sub = key.partition(KEY_SEP)
+    repo, sep, sub = key.partition(KEY_SEP)
     if "/" not in repo or repo.startswith("/") or repo.endswith("/"):
         raise OverrideError(f"覆写键 {key!r} 不合法：应为 owner/repo:subpath")
+    if not sep:
+        # `"owner/repo"` 少了结尾冒号：形状看着像键，实际永远匹配不到任何条目。
+        # 放行的话，exclude 会静默失效（条目还留在目录里），别的字段则抛错让整次
+        # 抓取失败 —— 两种后果都比直接拒绝这个键难查得多。
+        raise OverrideError(
+            f"覆写键 {key!r} 缺少分隔符 `:`，应为 `owner/repo:`（仓库根条目 subpath 留空，但冒号要写）"
+        )
     if sub.startswith(("/", "\\")) or ".." in sub.replace("\\", "/").split("/"):
         raise OverrideError(f"{key}: subpath 可能逃逸：{sub!r}")
 
@@ -158,6 +167,12 @@ def apply(
             continue
         p = by_key.get(key)
         if p is None:
+            # `review_note` 只是给人看的备注，没有它条目也照样能进目录。
+            # 条目这轮不在（作者改了仓库名、删了 topic、或 --local-only 没重建到它）
+            # 时，一条备注不该让整份目录写不出去 —— 出声提示即可。
+            if not (set(patch) - CONTROL_FIELDS):
+                say(f"  注意：{key} 本来就不在目录里，review_note 暂时没有对应条目")
+                continue
             if make_entry is None:
                 raise OverrideError(f"{key}: 目录里没有这个条目，且调用方不支持补建")
             say(f"  覆写补建（目录里没有）：{key}")

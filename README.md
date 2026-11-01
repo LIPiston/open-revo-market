@@ -18,7 +18,7 @@ irm https://raw.githubusercontent.com/LIPiston/open-revo-market/main/_tools/inst
 python build_market.py --install    # 构建并装到 %APPDATA%\OpenRevo\plugins\plugin-market\
 ```
 
-`_tools/install-market.ps1` 还支持 `-Local`（用仓库里已入库的 `plugin-market\`）、`-From <目录>`、`-DryRun`、`-Repo owner/name`。
+`_tools/install-market.ps1` 还支持 `-Local`（用仓库里已入库的 `plugin-market\`）、`-From <目录>`、`-DryRun`、`-Repo owner/name`、`-Direct`（强制直连，不走加速）。
 
 ## 三扇门
 
@@ -57,7 +57,7 @@ README 只保留最容易被搞错的三条，其余一律链到唯一出处：
 * **八种 `plugin_type` 的运行行为未做端到端实测**：`skin` / `background` / `tab` / `widget` / `slot` 在前端里有注入分支，`service` / `shell` / `driver` 的取值与语义来自官方手册。市场对 `plugin_type` 只做分组筛选与配色，不据此推断任何运行期行为，也不承诺八种都装得上。
 * **加速下载是可选路径**：加速后的归档根目录与直连一致（已实测），但宿主是否接受 GitHub 之外的下载域名**未验证** —— 所以加速默认关闭，由用户在安装弹窗里勾选。
 * **没有在真实宿主里完整走完一次「一键安装到生效」**：参数与归档目录解析已对齐，但「装完插件真的出现在侧边栏」这一步没有真机截图佐证。
-* **能力字段目前恒为 `null`**：仓库里没有静态扫描器，爬虫按设计只写「未扫描」。已审核条目的能力由审核者读源码后写进覆写层（见 [`docs/review.md`](docs/review.md)）。
+* **爬虫恒写 `null`**：仓库里没有静态扫描器，所以新收录的条目能力一律是「未扫描」。已审核条目的能力由审核者读源码后写进覆写层（见 [`docs/review.md`](docs/review.md)）。
 * **许可**：仓库目前**没有 `LICENSE` 文件**（尽管目录条目声明 MIT）—— 如需正式授权请补一份。
 
 ## 仓库结构

@@ -108,6 +108,8 @@
 python market/validate_catalog.py market/catalog.json
 ```
 
+这条验的是**已经叠加过覆写的目录**，所以它挡得住形状问题，挡不住「你写在 overrides.json 里但还没叠进去的错」。要连覆写一起验，见本文件 §六「自检」。
+
 | 校验项 | 管什么 | 谁管 |
 |---|---|---|
 | E1 | 顶层 `count` 等于条目数 | 机器 |
@@ -119,14 +121,16 @@ python market/validate_catalog.py market/catalog.json
 | E7 | `unreviewed` 是布尔 | 机器 |
 | E8 | 必填字段存在 | 机器 |
 | E9 | `description` 不含 HTML 标签 | 机器 |
-| E10 | `commit` 是 40 位 hex | 机器 |
-| E11 | `sha256` 是 64 位 hex | 机器 |
+| E10 | 有 `commit` 时必须是 40 位 hex（可缺省） | 机器 |
+| E11 | 有 `sha256` 时必须是 64 位 hex（可缺省） | 机器 |
 | E12 | `author` 等于 `repo` 的 owner | 机器 |
 | E13 | 形态字段形状（`target_slot` / `service` / `shortcuts` 等） | 机器 |
 | E14 | `min_host_version` 是三段数字或 `null` | 机器 |
 | E15 | `plugin_type: slot` 必须给 `target_slot` | 机器（**只对已审核条目**） |
 
 E15 只对已审核条目强制，是有意的：未审核条目是爬虫自动收的，第三方清单写不全不该让本仓库的 CI 变红 —— 那会让目录停止刷新。所以 **`slot` 插件要升级到已审核时，`target_slot` 必须补齐**，这条得人工确认。
+
+> 但别把这条读成「第三方数据不会打断刷新」。E15 是**唯一**为自动收录放宽的规则；其余照旧对第三方数据生效：`description` 里带 HTML 会命中 E9，两个仓库用了同一个 `id` 会命中 E2，`plugin_type` 写了八个之外的值会命中 E4。这些确实会让 CI 红、目录停在上一轮，需要人工介入。放宽 E15 的理由是「`slot` 缺插槽不该由作者一个人背」，不是「第三方数据一律免检」。
 
 **机器挡不住的，才是审核的活**：S1–S4、A1–A4（适配那四项），以及「他写的描述是否诚实」。
 
@@ -156,18 +160,20 @@ E15 只对已审核条目强制，是有意的：未审核条目是爬虫自动�
   "format": 1,
   "plugins": {
     "LIPiston/open-revo-market:plugin-market": { "unreviewed": false },
-    "someone/power-plugin": {
+    "someone/power-plugin:": {
       "unreviewed": false,
       "capabilities": ["host-runtime", "fs-write"],
       "sha256": "64 位小写 hex"
     },
-    "someone/broken-plugin": {
+    "someone/broken-plugin:": {
       "exclude": true,
       "review_note": "需要 PawnIO 驱动，但 README 与清单都没写缺驱动时会怎样；AMD 专用未在首屏说明。"
     }
   }
 }
 ```
+
+> **冒号必须写。** 仓库根条目的 subpath 留空，但 `owner/repo` 后面那个 `:` 不能省。少了它，`load()` 会在读取阶段就报「缺少分隔符」—— 这是刻意的：键少一个冒号时形状看着对、实际永远匹配不到任何条目，`exclude` 会静默失效，别的字段则让整次抓取失败。
 
 ### 值的语义
 
@@ -236,14 +242,24 @@ E15 只对已审核条目强制，是有意的：未审核条目是爬虫自动�
 
 `exclude` 到一条当前不在目录里的键（多半是键拼错了）不报错，但会打一行提示 —— 排除静默失效比报错难查。
 
-### 自检
+### 自检（改完覆写层必跑）
 
 ```bash
-python market/overrides.py                      # format / 字段名 / 空白语义 / 排除统计
+python market/overrides.py                      # format / 字段名 / 键形状 / 排除统计
+```
+
+这条只校验覆写文件本身：**它不检查 `capabilities` 取值、`sha256` 形状、`subpath` 里有没有 `..` 这类目录级规则**。要验这部分，必须先把覆写叠加成一份目录再校验：
+
+```bash
+python market/crawl_topic.py --local-only        # 离线重放覆写层，写出 catalog.json
 python market/validate_catalog.py market/catalog.json
 ```
 
-CI 在抓取之前先跑 `overrides.py`：文件有错立刻红，不用等爬完十分钟才发现。
+两步都绿才算数。只跑 `validate_catalog.py` 而不先 `--local-only`，校验的是**上一轮**的目录，你刚写的覆写还没进去 —— 那种「绿」什么也没证明。
+
+CI 的顺序也是先 `overrides.py` 再抓取再 `validate_catalog.py`：文件有错立刻红，不用等爬完十分钟才发现。
+
+> 改完覆写层**不会立刻生效**：市场读的是 `catalog.json`，要等下一轮爬虫（每小时一次）或你手动跑一次 `--local-only`。所以批准完不要马上刷新页面找变化。
 
 ## 七、公开理由的边界
 
@@ -254,13 +270,19 @@ CI 在抓取之前先跑 `overrides.py`：文件有错立刻红，不用等爬�
 
 如果你是**因为安全疑虑下架**的，写「观察到 X 行为，与声明不符」就够，不要写「此人有恶意」—— 你观察到的是代码，不是动机。
 
-## 八、不变式（审核时不能让步的）
+## 八、不变式
 
-- **身份 = `owner/repo[/subpath]`**，绝不用展示名当键。
-- **作者 = 仓库归属者**，`manifest` 自填的 `author` 不作数。
-- **能力是三态**：`[...]` 检出、`[]` 扫过未检出、`null` 没扫过。爬虫只许写 `null`；人工写 `[]` 才是结论。
-- **人工判断不写在派生物里**：`catalog.json` 每小时整份重写，审核结论一律写 `overrides.json`。
-- **失败不伪装**：判不了就说判不了（`null`），不要填一个好看的默认值。
+审核时反复用到三条，出处只有 `maintenance.md`，这里不复制：
+
+| 想知道 | 看 |
+|---|---|
+| 为什么键必须用 `owner/repo:subpath` 而不是展示名或 `id` | [`maintenance.md`](maintenance.md) §不变式 |
+| 为什么作者取仓库归属者而不是清单里的 `author` | 同上 |
+| 为什么能力必须三态、为什么爬虫只许写 `null` | 同上 |
+
+审核这一步只需要记住一条操作后果：**你的结论写 `overrides.json`，不要碰 `catalog.json`** —— 后者每小时被整份重写。
+
+还有一条审核时最常忘的：**判不了就说判不了**（写 `null`），不要填一个好看的默认值。宁可显示「未扫描」，也不要让用户以为有人查过。
 
 ## 下一步
 

@@ -2,7 +2,7 @@
 
 > **给谁看 / 什么时候读**：你要判断某个插件行为在当前宿主上可否实现，或者在某处看到「宿主会拒收」「subpath 多一层」这类说法想查依据时读这份。它是宿主行为的**唯一出处** —— 其他地方提到宿主边界都链到这里。
 >
-> 内容全部来自对 `open-revo.exe` 的实测与命令注册表取证，不是官方手册的转述。
+> 内容主要来自对 `open-revo.exe` 的实测与命令注册表取证，不是照抄官方手册。八种形态里前五种有前端实测依据，`service` / `shell` / `driver` 三种的取值与语义只有官方手册来源（见下表「取证来源」列）。
 
 ## 形态
 
@@ -89,7 +89,17 @@ can_write_clipboard  can_read_manifest  can_manage_service
 
 这是 `${can_*}` 命名，**不是**第三方文档里写的 `version` / `capabilities: string[]`。按后者写会拿到 `undefined`，能力判断全部失效。
 
-命令不存在（宿主版本较旧）或某个 `can_*` 为假 ⇒ 市场按能力位降级，**不按版本号猜、也不假装能装**。
+命令不存在（宿主版本较旧）或某个 `can_*` 为假 ⇒ 市场按能力位降级，**不按版本号猜、也不假装能装**。每个能力位在两端的表现：
+
+| 能力位 | 为真时 | 为假 / 命令不存在时 |
+|---|---|---|
+| `can_install` | 点【安装】直接调 `install_plugin_from_url`，宿主负责下载、校验、解压、落盘 | 弹窗给出可粘贴的 PowerShell 命令 |
+| `can_uninstall` | 卡片上出现【卸载】，目录移入回收站 | 隐藏【卸载】 |
+| `can_reload` | 装完调 `reload_plugins` 自动重扫 | 退回 `get_custom_plugins` 只读枚举 |
+| `can_read_manifest` | 读已装版本，标出「可更新」 | 不显示更新提示 |
+| `can_open_url` | 【打开源码】交给系统浏览器 | 降级为复制链接 |
+| `can_write_clipboard` | 复制走宿主 `write_clipboard` | 退回 `navigator.clipboard` → `execCommand` 三层降级 |
+| `can_manage_service` | 有 `service` 声明的插件给服务启停按钮与状态文字 | 按钮 `disabled`，且**一条服务类 IPC 都不发** |
 
 ## 插件 IPC
 

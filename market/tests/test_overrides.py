@@ -75,3 +75,63 @@ def test_unknown_field_still_rejected(tmp_path: Path) -> None:
 
     with pytest.raises(overrides.OverrideError):
         overrides.load(path)
+
+
+def test_key_without_trailing_colon_is_rejected(tmp_path: Path) -> None:
+    """键必须写明 `repo:` —— 少一个冒号不会报错，只会静默匹配不到任何条目。
+
+    这是真实踩过的坑：文档示例漏了冒号，`{"owner/repo": {...}}` 被 `load()` 收下，
+    然后 `apply()` 找不到条目：`exclude` 静默失效（条目还在目录里），
+    其它字段则抛错让整次抓取失败。两种后果都比直接拒绝这个键难查得多。
+    """
+    path = write_overrides(tmp_path, {"owner/demo": {"unreviewed": False}})
+
+    with pytest.raises(overrides.OverrideError):
+        overrides.load(path)
+
+
+def test_exclude_on_missing_entry_only_warns() -> None:
+    """给目录里没有的条目写 exclude 只提示、不炸整次抓取。
+
+    作者删了 topic 或改了仓库名时，键还在覆写层里但条目已经没了 ——
+    这不该让目录停止刷新。
+    """
+    catalog = make_catalog()
+    warnings: list[str] = []
+
+    overrides.apply(
+        catalog,
+        {"someone/gone:": {"exclude": True, "review_note": "已下架"}},
+        log=warnings.append,
+    )
+
+    assert len(catalog["plugins"]) == 1
+    assert any("exclude 没有实际作用" in w for w in warnings)
+
+
+def test_review_note_on_missing_entry_does_not_crash() -> None:
+    """`review_note` 只是给人看的备注，不该因为条目这轮不在目录里就炸掉抓取。
+
+    审核者常给「收录但未审核」的条目写备注；作者改仓库名或某轮 --local-only
+    没重建到它时，条目会短暂消失。一条备注不该让整份目录写不出去。
+    """
+    catalog = make_catalog()
+    warnings: list[str] = []
+
+    overrides.apply(
+        catalog,
+        {"someone/gone:": {"review_note": "理由"}},
+        log=warnings.append,
+    )
+
+    assert len(catalog["plugins"]) == 1
+    assert any("review_note 暂时没有对应条目" in w for w in warnings)
+
+
+def test_review_note_must_be_string(tmp_path: Path) -> None:
+    """备注是写给人读的，数字或对象写进来只会让人看到 `123` 这种没意义的东西。"""
+    path = write_overrides(tmp_path, {"owner/demo:": {"review_note": 123}})
+
+    with pytest.raises(overrides.OverrideError):
+        overrides.load(path)
+
