@@ -53,6 +53,14 @@
 **`catalog.json` 是纯派生物，改它没用。** 爬虫每轮按 topic 全量重抓，覆盖整份文件；
 人工判断一律写在 `market/overrides.json`，抓完之后无条件叠加。
 
+`catalog.json` 的字段只有 `generatedAt` / `topic` / `count` / `plugins`。
+**没有版本号字段** —— 曾经有个 `"format": 1`，但两端都不读（前端只检查 `plugins` 是数组，
+校验器完全不看它），改它不会有任何行为变化。与其留一个假装在做版本协商的空字段，
+不如去掉，改成真需要时再连读方一起做。
+
+`overrides.json` 里的 `format` 则**是真会读的**（`overrides.py` 校验，不是 1 就报错）：
+它用来挡住「把别的 JSON 误当覆写文件放到这个路径」。
+
 文件形状（键 = `owner/repo:subpath`，仓库根条目 subpath 留空）：
 
 ```json

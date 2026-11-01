@@ -53,7 +53,6 @@ const CONFIG = {
  * 注意：构建时 build_market.py 会用 market/catalog.json 整块替换这个常量，
  * 所以这里只是「catalog.json 缺失」时的兜底，两处应保持一致。 */
 const SEED = {
-  format: 1,
   generatedAt: null,
   source: 'builtin-seed',
   count: 1,
@@ -398,7 +397,6 @@ function normalizeCatalog(raw, source) {
     telemetry: (p.telemetry && typeof p.telemetry === 'object' && !Array.isArray(p.telemetry)) ? p.telemetry : null,
   }));
   return {
-    format: raw.format || 1,
     generatedAt: raw.generatedAt || null,
     source,
     plugins,

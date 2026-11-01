@@ -482,7 +482,6 @@ def crawl(token: str | None, include_local: bool = True) -> dict:
     final = sorted(dedup.values(), key=lambda e: (e.get("unreviewed", True), -(e.get("stars") or 0), e["repo"]))
 
     return {
-        "format": 1,
         "generatedAt": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "topic": TOPIC,
         "count": len(final),
@@ -570,7 +569,6 @@ def local_only_catalog(out: Path, overrides_map: dict[str, dict]) -> dict | None
     final.sort(key=lambda e: (e.get("unreviewed", True), -(e.get("stars") or 0), e["repo"]))
 
     catalog = {
-        "format": prev.get("format", 1),
         "generatedAt": prev.get("generatedAt"),
         "topic": prev.get("topic", TOPIC),
         "count": len(final),
