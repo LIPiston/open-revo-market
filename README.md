@@ -1,12 +1,10 @@
-# OpenRevo 插件市场 · `open-revo-market`
+# OpenRevo 插件市场
 
-OpenRevo（`open-revo.exe`）的**第三方插件市场**：宿主里的一个页签，浏览、安装、卸载插件。
+OpenRevo（`open-revo.exe`）的第三方插件市场：宿主里的一个页签，浏览、安装、卸载插件。
 
----
+目录来自 GitHub 上带 `openrevo-plugin` topic 的仓库，每小时刷新一次，任何人都能上架。
 
-## 快速开始
-
-**一条命令安装**（不 clone 仓库，直接拉 GitHub 上的现成产物）：
+## 安装
 
 ```powershell
 irm https://raw.githubusercontent.com/LIPiston/open-revo-market/main/_tools/install-market.ps1 | iex
@@ -18,65 +16,69 @@ irm https://raw.githubusercontent.com/LIPiston/open-revo-market/main/_tools/inst
 
 ```bash
 python build_market.py --install    # 构建并装到 %APPDATA%\OpenRevo\plugins\plugin-market\
-python build_market.py --check      # 只做产物自检，不写文件
-bash _tools/market-verify.sh cyber  # 验收闸（另跑 mono 主题），非 0 不许交付
 ```
 
-> `_tools\install-market.ps1` 也支持 `-Local`（用仓库里已入库的 `plugin-market\`）、
-> `-From <目录>`（指定来源）、`-DryRun`（只看要做什么）、`-Repo owner/name`（换仓库）。
+`_tools/install-market.ps1` 还支持 `-Local`（用仓库里已入库的 `plugin-market\`）、`-From <目录>`、`-DryRun`、`-Repo owner/name`。
 
----
+## 三扇门
+
+| 你要做的事 | 读这份 |
+|---|---|
+| **发布自己的插件** —— manifest 怎么写、打 topic 后多久被收录、审查看什么、被拒了怎么办 | [`docs/submit-plugin.md`](docs/submit-plugin.md) |
+| **审核别人的插件** —— 三档结论、四条一票否决、四维环境适配、逐项检查单、覆写层操作 | [`docs/review.md`](docs/review.md) |
+| **改市场本身** —— 构建、本地预览、验收闸八轮专项、爬虫、CI、下载加速 | [`docs/maintenance.md`](docs/maintenance.md) |
+
+宿主到底支持什么行为（IPC、sandbox、`subpath` 语义、安装器防线）统一在 [`docs/host-contract.md`](docs/host-contract.md)。
+
+## 市场是什么、不是什么
+
+**是**：一个按 GitHub topic 自动收录的目录，带能力披露、兼容性徽章、一键安装（宿主支持时）。
+
+**不是**：不是安全审计，也没有前置审查。作者打上 topic 就会被收录，标注「未审核」；「已审核」需要单独申请，判据写在 [`docs/review.md`](docs/review.md)。
+
+插件是第三方代码，**以你的权限运行**。装之前看清披露，只装你信任的来源。`tab` 插件与宿主同源，不要把「跑在 iframe 里」当成安全边界。
+
+## 几条核心口径
+
+README 只保留最容易被搞错的三条，其余一律链到唯一出处：
+
+* **安装方式由宿主能力位决定**（运行时探测 `get_plugin_host_capabilities`），不按版本号猜，也不假装能装。
+* **人工判断写在 `market/overrides.json`**；`market/catalog.json` 是爬虫每小时整份重写的派生物，**改它没用**。
+* **清单里自述的字段**（权限、遥测、挂载插槽、伴随服务、窗口几何）单列一块「清单声明」如实转述，**不当成授权依据** —— 真正的边界由宿主沙盒与 IPC 决定。
+
+"清单里写什么就信什么"这条的边界在 [`docs/submit-plugin.md`](docs/submit-plugin.md)；"哪些字段宿主压根不读"在 [`docs/host-contract.md`](docs/host-contract.md)；改代码时不能让步的五条不变式在 [`docs/maintenance.md`](docs/maintenance.md)。
+
+## 已知边界
+
+诚实清单，不要当成待办事项读：
+
+* **一键安装依赖宿主能力**：宿主开放了 `install_plugin_from_url` 等 IPC 才能一键装；否则市场退回「复制命令」的交接路径，不会假装能装。
+* **`subpath` 是归档内路径，不是仓库内路径**：传错就会报 `manifest.json not found in resolved content directory`。这条为什么成立、该怎么构造，见 [`docs/host-contract.md`](docs/host-contract.md)。
+* **八种 `plugin_type` 的运行行为未做端到端实测**：`skin` / `background` / `tab` / `widget` / `slot` 在前端里有注入分支，`service` / `shell` / `driver` 的取值与语义来自官方手册。市场对 `plugin_type` 只做分组筛选与配色，不据此推断任何运行期行为，也不承诺八种都装得上。
+* **加速下载是可选路径**：加速后的归档根目录与直连一致（已实测），但宿主是否接受 GitHub 之外的下载域名**未验证** —— 所以加速默认关闭，由用户在安装弹窗里勾选。
+* **没有在真实宿主里完整走完一次「一键安装到生效」**：参数与归档目录解析已对齐，但「装完插件真的出现在侧边栏」这一步没有真机截图佐证。
+* **能力字段目前恒为 `null`**：仓库里没有静态扫描器，爬虫按设计只写「未扫描」。已审核条目的能力由审核者读源码后写进覆写层（见 [`docs/review.md`](docs/review.md)）。
+* **许可**：仓库目前**没有 `LICENSE` 文件**（尽管目录条目声明 MIT）—— 如需正式授权请补一份。
 
 ## 仓库结构
 
 ```
 open-revo-market\
-├── market\                     # 市场源码与目录链
-│   ├── src\                    #   market.js / market.css / index.template.html
-│   ├── catalog.json            #   派生目录（CI 每小时重写，别手改）
-│   ├── overrides.json          #   人工覆写层（审核 / 覆写 / 下架，要改的是这里）
-│   ├── overrides.py            #   覆写层读写与校验
-│   ├── crawl_topic.py          #   topic 爬虫（末尾叠加覆写层）
-│   └── validate_catalog.py     #   目录校验
-├── build_market.py             # 市场构建器（单文件产物 + 自检）
-├── plugin-market\              # ★ 市场构建产物（入库，可直接装）
+├── market\
+│   ├── src\                    # 市场源码（只改这里）
+│   ├── catalog.json            # 派生目录（CI 每小时重写，别手改）
+│   ├── overrides.json          # 人工覆写层（审核 / 覆写 / 下架）
+│   └── *.py                    # 爬虫 / 覆写层 / 目录校验 / 测试
+├── build_market.py             # 构建器（单文件产物 + 自检）
+├── plugin-market\              # 市场构建产物（入库，可直接装）
 ├── _tools\                     # 安装 / 验收 / 预览 / 出图
-└── docs\                       # 详细文档（见下）
+└── docs\                       # 文档（见上面的三扇门）
 ```
 
-**市场的核心口径**（细节见 [`docs/market.md`](docs/market.md)）：
-
-* 安装方式**由宿主能力位决定**（运行时探测 `get_plugin_host_capabilities`），不按版本号猜。
-* 构建产物**必须单文件**：宿主用 `srcDoc` 注入，任何外部引用都会 404。
-* 在线目录拉不到时保留兜底数据并如实写明原因；`stars` / 能力披露缺失写 `null`，不伪装。
-* 人工判断（审核标记、字段覆写、`sha256`、下架）写在 `market/overrides.json`；
-  `market/catalog.json` 是爬虫每小时整份重写的派生物，**改它没用**。
-* GitHub 直连不稳时走 gh-proxy 加速；一键安装的加速是**可选开关**，默认不启用。
-* 清单里自述的形态字段（挂载插槽、权限、遥测、伴随服务、窗口几何等）单列一块「清单声明」如实转述，
-  **不当成授权依据** —— 真正的边界仍由宿主沙盒与 IPC 决定。
-* 已装插件可【启用】【停用】；清单声明 `service` 且宿主开放 `can_manage_service` 时另有服务启停与状态文字。
-  宿主不返回插件的开关态，市场也**不显示**任何启停状态 —— 只发幂等动作。
-
----
-
-## 文档地图
-
-| 文档 | 内容 |
-|---|---|
-| [`docs/market.md`](docs/market.md) | 市场完整说明：能力、宿主降级、构建、预览、验收闸、加速、安装卸载 |
-| [`docs/host-and-plugins.md`](docs/host-and-plugins.md) | 插件生态实测：八种形态、sandbox、宿主 IPC、下载链路 |
-| [`docs/project-status.md`](docs/project-status.md) | 已知边界 |
-| [`docs/reference/host-plugin-ipc.md`](docs/reference/host-plugin-ipc.md) | 插件 IPC 清单：签名、能力位、安装器防线 |
-
----
+细节在 [`docs/maintenance.md`](docs/maintenance.md)。
 
 ## 注意事项
 
 * **别手改产物**：改 `market/src/`，然后 `python build_market.py --install`。
-* 当前基线：cyber / mono 双主题 × 两种宿主 mock + 加速 / 分页 / 形态 / 披露 / 生命周期五轮专项 + 服务能力缺失，
-  **八轮全 PASS**，0 JS 错误。改版后的 UI 在真实宿主里复验通过（深色自带底，不再出现白底白字）。
-* 八种 `plugin_type` 的取值已确认在官方手册内；其中 `service` / `shell` / `driver`
-  在前端 JS 里没有注入分支，**形态取值的运行行为未做端到端实测** ——
-  市场只按取值筛选与配色，不据此推断运行期行为。
 * 改 `%APPDATA%\OpenRevo\config.json` 前**先备份**：宿主运行中会整份回写。
-* **许可**：仓库目前**没有 `LICENSE` 文件**（尽管目录条目声明 MIT）——如需正式授权请补一份。
+* 改完代码或文档，验收闸的跑法见 [`docs/maintenance.md`](docs/maintenance.md) —— `PASS` 才许交付。

@@ -4,81 +4,29 @@ OpenRevo 主控台里的一个 `tab` 页签：浏览第三方插件、看能力�
 
 ## 它做什么
 
-- **浏览目录**：拉取派生目录 `market/catalog.json`（GitHub topic 抓取 + 人工覆写层），
-  按类型分组（已审核 / 未审核），支持搜索与筛选；列表可滚动，超过一页自动分页（每页 12 条）。
-- **实时发现**：直接查 GitHub 上带 `openrevo-plugin` topic 的仓库 —— 作者打上 topic 后无需等待爬虫就能被发现。
-- **识别已安装**：通过宿主的 `get_custom_plugins` 只读命令，给已安装的插件打标签。
-- **能力披露**：列出静态扫描查到的联网 / 文件读写等能力，并把危险组合单列（如"读凭据 + 有网络"）。
-  清单里自述的字段（挂载插槽、权限、遥测、伴随服务、窗口几何等）另有一块「清单声明」如实转述。
+- **浏览目录**：按类型分组（已审核 / 未审核），支持搜索与筛选；列表可滚动，超过一页自动分页（每页 12 条）。
+- **实时发现**：直接查 GitHub 上带 `openrevo-plugin` topic 的仓库，不用等每小时刷新。
+- **识别已安装**：给已装插件打标签，可按安装状态筛选。
+- **能力披露**：列出检出的联网 / 文件读写等能力，危险组合单列。清单里的自述字段另有一块「清单声明」如实转述。
 - **安装 / 卸载**：宿主提供接口时一键完成；不提供时给出可粘贴的命令。
-- **启停 / 服务**：已装插件的卡片上有【启用】【停用】；清单声明了 `service` 且宿主开放
-  `can_manage_service` 时，另有【启动服务】【停止服务】与一行状态文字。
+- **启停 / 服务**：已装插件卡片上有【启用】【停用】；清单声明 `service` 且宿主支持时，另有服务启停与状态文字。
 
-## 安装方式由宿主能力决定（运行时探测）
+## 安装方式由宿主决定
 
-市场启动时调用 `get_plugin_host_capabilities`，按返回的能力位决定 UI，**不看版本号**：
+市场启动时调用 `get_plugin_host_capabilities`，按能力位决定显示哪些按钮，**不看版本号**。宿主没有对应命令时不会报错，整体降级到「浏览 + 复制命令」模式。
 
-| 能力位 | 为 true 时市场会 | 为 false / 命令不存在时 |
-|---|---|---|
-| `can_install` | 点【安装】直接调 `install_plugin_from_url` | 弹窗给出可粘贴的 PowerShell 命令 |
-| `can_uninstall` | 卡片上出现【卸载】，移入回收站 | 隐藏【卸载】按钮 |
-| `can_reload` | 装完调 `reload_plugins` 自动重扫 | 退回 `get_custom_plugins` 只读枚举 |
-| `can_read_manifest` | 读已装版本，标出「可更新」 | 不显示更新提示 |
-| `can_open_url` | 【打开源码】交给系统浏览器 | 降级为复制链接 |
-| `can_write_clipboard` | 复制走宿主 | 退回 `navigator.clipboard` / `execCommand` |
+一键安装时市场只发一条 IPC，下载、校验、解压、落盘全在宿主侧；市场自己不下载、不写盘。
 
-**宿主没有这个命令时不会报错**，市场整体降级到「浏览 + 复制命令」模式。
-这一点是硬要求：能力判断必须是探测出来的，不能写死在文案里。
+> 目录条目没带 `sha256` 时，宿主只能校验传输完整性，**证明不了内容没被篡改**。
 
-## 一键安装做了什么、没做什么
+## 装完打不开？
 
-安装时市场只发一条 IPC：
-
-```js
-invoke('install_plugin_from_url', { id, url: 'https://codeload.github.com/<repo>/zip/refs/heads/<branch>', subpath? })
-```
-
-`id` 与 `url` 都是**宿主 serde 的必需字段**，缺一个就是
-`missing required key <name>`；`id` 同时决定安装后的目录名。`subpath` / `sha256` 可选。
-
-**宿主**负责下载、校验、解压、落盘，具体防线都在宿主侧：
-
-- 拒绝非 `https://` 的 URL；
-- 可选 `sha256` 完整性校验（目录条目提供时才会带上）；
-- 解压后断言路径边界，防 Zip Slip；
-- 目标目录必须落在 OpenRevo 的 AppData 边界内；
-- 装完自动重扫插件目录。
-
-**市场不做的**：不自己下载、不写盘、不执行解压 —— `tab` 的 iframe 没有 `allow-downloads`，
-`window.open` 也被拦（没有 `allow-popups`），这些能力本来就不在插件手里。
-
-> 目录条目里如果不带 `sha256`，宿主只能校验传输完整性，**证明不了内容没被篡改**。
-> 想升级为可验证安装，请在仓库的 `market/overrides.json` 里给对应条目写 `sha256`。
-> 不要改 `catalog.json`：它每小时被爬虫整份重写。
-
-## 安装这个市场本身
-
-```powershell
-$d = "$env:APPDATA\OpenRevo\plugins\plugin-market"
-New-Item -ItemType Directory -Force -Path $d | Out-Null
-Copy-Item -Recurse -Force .\plugin-market\* $d
-```
-
-或者在本仓库根目录直接：
-
-```bash
-python build_market.py --install
-```
-
-装完在宿主侧边栏进 **插件** 页，点右上角 **刷新**，顶栏会出现「插件市场」页签。
-
-## 收录新插件
-
-给你自己的插件仓库打上 `openrevo-plugin` topic，它就会被收录（快车道，标注"未审核"）。
-想进"已审核"分区，往仓库的 `market/overrides.json` 提一个 PR，给该条目加
-`"unreviewed": false`。**不要改 `catalog.json`** —— 它每小时被爬虫整份重写，改了下一轮就没了。
+在宿主侧边栏进 **插件** 页，点右上角 **刷新**，顶栏就会出现「插件市场」页签。
 
 ## 卸载
 
-宿主支持 `can_uninstall` 时，直接在卡片上点【卸载】（会移入回收站）。
-否则删掉 `%APPDATA%\OpenRevo\plugins\plugin-market` 整个文件夹，回插件页刷新。
+宿主支持时直接在卡片上点【卸载】（移入回收站）。
+
+否则删掉 `%APPDATA%\OpenRevo\plugins\plugin-market` 整个文件夹，再回插件页点一次【刷新】。
+
+> 只装你信任的来源。插件是第三方代码，**以你的权限运行**；本市场只做来源绑定与静态披露，不构成安全审计。

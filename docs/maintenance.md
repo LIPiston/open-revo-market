@@ -152,7 +152,7 @@ bash _tools/market-verify.sh mono
 | 手动 `git clone` 备用命令 | 直接给加速地址（不通可去掉前缀） |
 | `_tools/install-market.ps1` | 走加速，**失败自动回退直连**；`-Direct` 强制直连 |
 
-**一键安装为什么默认不加速**：加速后的归档实测仍以 `<repo>-<branch>/` 为根目录，所以 `subpath` 语义不变；但宿主是否接受 GitHub 之外的下载域名**尚未实测**。所以做成显式开关，并在弹窗里写明「若报安全策略错误，关掉这个开关用直连重试」—— 不把未验证的路径设成默认。
+**一键安装为什么默认不加速**：加速后的归档根目录与直连一致（已实测，因此 `subpath` 语义不变，规则见 [`host-contract.md`](host-contract.md)）；但宿主是否接受 GitHub 之外的下载域名**尚未实测**。所以做成显式开关，并在弹窗里写明「若报安全策略错误，关掉这个开关用直连重试」—— 不把未验证的路径设成默认。
 
 ## CI
 
@@ -171,7 +171,7 @@ bash _tools/market-verify.sh mono
 irm https://raw.githubusercontent.com/LIPiston/open-revo-market/main/_tools/install-market.ps1 | iex
 ```
 
-脚本拉 main 分支的 `plugin-market/`，剥掉 `<repo>-<branch>/` 包装层后复制到 `%APPDATA%\OpenRevo\plugins\plugin-market\`，并**自校验** `manifest.json` 的 `id` 与 `index.html` 的完整性（少于 20 KB 直接判失败）。已有旧版会被覆盖。
+脚本拉 main 分支的 `plugin-market/`，剥掉归档的包装层后复制到 `%APPDATA%\OpenRevo\plugins\plugin-market\`，并**自校验** `manifest.json` 的 `id` 与 `index.html` 的完整性（少于 20 KB 直接判失败）。已有旧版会被覆盖。
 
 直连 raw.githubusercontent 打不开时：
 
