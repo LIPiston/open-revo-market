@@ -1,0 +1,117 @@
+<doc>
+  <h1 id="TiNRNXlD">文档重构：让「上架」和「审核」成为主线</h1>
+  <p id="OStIazCR">改掉任何一条你认为不对的推荐，或者在段落上留言；没动的我按已同意处理。看完在终端告诉我这轮结束。</p>
+  <h2 id="CzhM94TD">我理解到的</h2>
+  <p id="34xPNaqt">现在的文档是照着「维护者自己查口径」长出来的。九份文件、约 850 行里，构建、本地预览、验收闸的八轮专项、从 exe 里搜命令的取证方法占了近七成；而作者真正要看的——怎么写 manifest、怎么被收录、审核看什么——被切碎在根 README、<code>docs/market.md</code> §3、<code>market/README.md</code>、<code>market/PLUGIN_README.md</code> 四个地方，同一件事各讲一遍。最典型的重复是 <code>subpath</code> 为什么要多一层 <code>&lt;repo&gt;-&lt;branch&gt;/</code>：三个文件各解释了一次，措辞还不完全一致。所以「乱」不是内容写错了，是<b>同一件事有四个出处、且都不是从读者要做什么出发</b>。</p>
+  <p id="WFt0MQW1">你要的是：以当前这版代码（<code>08ffd16</code>）为准，<b>插件作者怎么上架</b>、<b>你怎么审核</b>成为主线；维护者那套（宿主 IPC 取证、构建、验收闸）不消失，但退到后面、各只留一份，别再各处重写。</p>
+  <p id="n00TBUfv">审核这件事，你给的口径是：不是看插件写得漂不漂亮，而是替用户挡住两类风险——<b>在别人机器上装了会不会坏（环境适配）</b>，和<b>它拿到的东西会不会害到用户（安全性）</b>。而底层的理由是你点出来的那句：<b>OpenRevo 一直运行在系统最高权限</b>，所以插件一旦被装进来，它做的事就是最高权限在做的事。你也说了，市场还在试用和制作阶段，目前<b>没有哪一条单独就能定生死</b>——这正好说明现在缺的不是机制（<code>overrides.json</code> 加 E1–E15 校验器已经够用），而是<b>成文的判据</b>。</p>
+  <h2 id="ox5054xb">已经定下的</h2>
+  <ul id="f2dILg4a">
+    <li>（你说的）以最新 commit 的代码为准，不按旧文档写。</li>
+    <li>（你说的）主线是两件事：作者怎么上架、怎么审核。</li>
+    <li>（你说的）审核的判据是环境适配 + 安全性，因为宿主常驻最高权限。</li>
+    <li>（你说的）现在还没有单独的否决条款，市场在试用期——所以判据要写成能逐步收紧的东西，不能假装已经封版。</li>
+    <li>（我的判断）「乱」的根因是同一内容多处出处，所以重构的重点是<b>归并</b>，不是重写措辞。</li>
+  </ul>
+  <h2 id="Exrpv-eU">第 1 轮</h2>
+  <h3 id="-CEW3nJN">1. 分岔：审核要不要现在就落成一份成文门槛？</h3>
+  <p id="kS5a_MEX"><b>推荐：要。</b>写成一份作者能自查、你能照着逐项过的门槛，分成三档：<b>不予收录</b>（硬性红线）、<b>收录但标注未审核</b>（满足基本要求、风险已披露）、<b>可进已审核</b>（红线和适配都过）。理由是：作者最想问的就是「我这个能不能过」，而你现在没有成文标准，每个插件都得从头想一遍，也没法对作者解释拒在哪。</p>
+  <p id="moiWckPh">这一条决定后面几条还要不要问：如果不要，审核文档就只写「怎么改 <code>overrides.json</code>」的流程，第 3、4、5 条全部作废。</p>
+  <h3 id="2MI-2n0p">2. 文件按读者切，还是按主题切？</h3>
+  <p id="OXxLY2s5"><b>推荐：按读者切三份，根 README 只做导航。</b></p>
+  <table id="uxSILBiT">
+    <tr>
+      <th>
+        <p>文件</p>
+      </th>
+      <th>
+        <p>给谁</p>
+      </th>
+      <th>
+        <p>装什么</p>
+      </th>
+    </tr>
+    <tr>
+      <td>
+        <p><code>README.md</code></p>
+      </td>
+      <td>
+        <p>所有人</p>
+      </td>
+      <td>
+        <p>一句话说清这是什么 + 三扇门（我要上架 / 我要审核 / 我在改市场本身）+ 一条安装命令</p>
+      </td>
+    </tr>
+    <tr>
+      <td>
+        <p><code>docs/上架指南.md</code></p>
+      </td>
+      <td>
+        <p>插件作者</p>
+      </td>
+      <td>
+        <p>manifest 怎么写、放哪、打 topic、多久被收录、审查看什么、常见被拒原因、更新与下架</p>
+      </td>
+    </tr>
+    <tr>
+      <td>
+        <p><code>docs/审核指南.md</code></p>
+      </td>
+      <td>
+        <p>你 / 审核者</p>
+      </td>
+      <td>
+        <p>三档门槛、逐项检查单、怎么验、<code>overrides.json</code> 操作、校验器对应关系</p>
+      </td>
+    </tr>
+    <tr>
+      <td>
+        <p><code>docs/市场维护.md</code></p>
+      </td>
+      <td>
+        <p>改市场本身的人</p>
+      </td>
+      <td>
+        <p>构建、本地预览、验收闸、爬虫、目录校验、CI</p>
+      </td>
+    </tr>
+  </table>
+  <p id="cU9PYARu">理由是：作者打开文档不该先撞见「验收闸跑八轮」。而维护者的内容一份就够，现在它被复制到三个文件里。</p>
+  <h3 id="1sT5tu5w">3. 那 9 个现有文件怎么处置？</h3>
+  <p id="PM31Vz-_"><b>推荐：4 份新增 + 2 份保留 + 3 份删除/合并。</b></p>
+  <ul id="DSTAPmrH">
+    <li>保留 <code>docs/reference/host-plugin-ipc.md</code>（IPC 取证，唯一出处，维护者文档链过去）；</li>
+    <li>保留 <code>market/PLUGIN_README.md</code>——它会被 <code>build_market.py</code> 复制成 <code>plugin-market/README.md</code>，是装进插件目录给终端用户看的，<b>不能删</b>，但内容改短、只讲用法不讲开发；</li>
+    <li><code>docs/market.md</code> 拆成「上架 / 审核 / 维护」三份后删除；</li>
+    <li><code>docs/host-and-plugins.md</code> 与 <code>docs/reference/host-plugin-ipc.md</code> 合并成一份（现在两处都讲能力位和 <code>subpath</code>）；</li>
+    <li><code>docs/project-status.md</code>（14 行「已知边界」）并入根 README 的一节，不单独成文；</li>
+    <li><code>market/README.md</code> 删除——它的内容全部属于根 README 或审核指南；</li>
+    <li><code>docs/README.md</code> 删除——根 README 已经是导航了。</li>
+  </ul>
+  <h3 id="1TydXkuy">4. 「安全」这一档，哪些是硬红线？</h3>
+  <p id="aP7Sb2oc"><b>推荐：以下四条写成一票否决</b>（因为宿主是最高权限，这几条出事就是系统级）：</p>
+  <ul id="R-ZBZZ9W">
+    <li>要求提权、装驱动、或带 <code>service</code> 伴随进程，却<b>没有在 README 和清单里写明它做什么、为什么必须提权</b>；</li>
+    <li>读凭据/密钥 <b>同时</b>有联网能力（目录里的 <code>credentials</code> + <code>network</code> 组合），且没有说明数据去哪；</li>
+    <li>运行期下载并执行代码（<code>dynamic-code</code>）、或用 <code>cmd</code>/<code>powershell</code> 拼字符串执行外部命令；</li>
+    <li>代码被混淆/打包成无法阅读的形式，或仓库里根本没有与产物对应的源码。</li>
+  </ul>
+  <p id="m9ATOrQS">理由是：这四条的共同点是<b>用户无法自己核实</b>——不是「看起来危险」，而是「装了就只能信作者」。其余风险（联网、读写文件）走披露，不作为红线。</p>
+  <h3 id="pZ9rk0Pw">5. 「环境适配」这一档，要覆盖哪些维度？</h3>
+  <p id="NkughEXu"><b>推荐：四个维度，缺一个就进不了「已审核」，但不拦收录。</b>（这一条我最不确定，你比我清楚真实用户都在什么机器上。）</p>
+  <ul id="bKuvoz_o">
+    <li><b>操作系统/架构</b>：Win10 还是 Win11、x64 还是 ARM64、有没有必须的 VC++ 运行库；</li>
+    <li><b>硬件厂商</b>：Intel / AMD / 两者；只支持一种的必须在 README 第一屏写清（现有目录里那条功耗插件就是典型）；</li>
+    <li><b>外部依赖</b>：驱动、PawnIO、其他软件、端口占用——缺了会怎样，是报错还是静默失效；</li>
+    <li><b>宿主版本</b>：<code>min_host_version</code> 是否如实填（校验器 E14 只认三段数字）。</li>
+  </ul>
+  <p id="a0XP7SvS">我在猜：你最在意的其实是第三条的「静默失效」——用户以为装上了，其实没生效。</p>
+  <h3 id="GX3Jsqo7">6. 被拒之后，拒在哪、作者怎么知道？</h3>
+  <p id="jWQ03o3k"><b>推荐：拒绝也落在 <code>overrides.json</code> 里，加一条可读的理由字段</b>（比如 <code>&quot;review_note&quot;: &quot;…&quot;</code>），市场和 PR 里都看得见。否则「为什么没进已审核」只能靠私聊，作者会反复重提。</p>
+  <p id="IoO7wxGd">/</p>
+  <p id="H26aPuqN">需要你确认的只有一件事：<b>理由要不要对公众可见</b>——公开能省掉重复沟通，但把作者的短板写在公开文件里。</p>
+  <h3 id="b1IKPHBi">7. 作者文档的语言与深度</h3>
+  <p id="Hdg54O6K"><b>推荐：假设作者会写 HTML/JS，但完全不懂 OpenRevo 内部</b>；所有内部概念（<code>srcDoc</code>、sandbox、<code>subpath</code>、能力位）只在「为什么必须这样做」的一句话里出现，不展开原理。</p>
+  <p id="uOE9zXck">理由是：现在文档一上来就讲 <code>srcDoc</code> 和 iframe sandbox，那是维护者关心的机制；作者只需要知道「必须单文件，否则样式加载不出来」。</p>
+</doc>
+
