@@ -4,10 +4,13 @@ OpenRevo 主控台里的一个 `tab` 页签：**浏览**第三方插件、看**�
 收录入口是 GitHub topic —— 作者给自己的插件仓库打上 `openrevo-plugin`，它就会自动出现在市场里。
 
 ```
-别人打 topic ──► 爬虫（每小时/可手动）──► market/catalog.json ──► 市场页签
-                     ↑                                              │
-              你也可以点「实时发现」直接查 GitHub，不等爬虫 ◄──────────┘
+别人打 topic ──► 爬虫（每小时/可手动）──► overrides.json 叠加 ──► catalog.json ──► 市场页签
+                     ↑                                                  │
+              你也可以点「实时发现」直接查 GitHub，不等爬虫 ◄──────────────┘
 ```
+
+`catalog.json` 是**纯派生物**：爬虫每轮全量重抓并整份覆盖，
+人工判断（审核、覆写、下架）写在 `overrides.json`，抓完之后由 `overrides.py` 叠加。
 
 ---
 
@@ -31,7 +34,7 @@ python build_market.py --install
 
 **能**：
 
-- 拉取策展目录，按类型分组（**已审核** / **未审核**）并提供搜索、筛选、排序；
+- 拉取派生目录（爬虫抓取 + 人工覆写层），按类型分组（**已审核** / **未审核**）并提供搜索、筛选、排序；
 - **实时发现**：直接查 GitHub 上带 `openrevo-plugin` topic 的仓库，作者打完 topic 立刻可见，不必等爬虫；
 - 通过宿主的 `get_custom_plugins`（只读）**认出已安装**的插件并打标；
 - **能力披露**：逐条列出静态扫描检出的联网 / 文件读写等能力，危险组合单列（如"读凭据 + 有网络"）；
@@ -60,7 +63,8 @@ invoke('install_plugin_from_url', { id, url, subpath, sha256? })   // id 与 url
 这类动作本来就不在插件手里。
 
 > ⚠️ 目录条目没带 `sha256` 时，宿主只能校验传输完整性，**证明不了内容没被篡改**。
-> 想升级为可验证安装，请给 `catalog.json` 条目补上 `sha256`。
+> 想升级为可验证安装，请把 `sha256` 写进 `market/overrides.json` 的对应条目
+> （校验器 E11 会检查形状）。**不要直接改 `catalog.json`** —— 它每小时会被重写。
 >
 > ⚠️ 一键安装走的是 GitHub 的源码归档（`codeload.github.com/<repo>/zip/refs/heads/<branch>`），
 > 归档根名规则（`<repo>-<branch>`，分支里的 `/` 换成 `-`）由 `archiveSubpath()` 复刻。
@@ -81,8 +85,19 @@ gh repo edit --add-topic openrevo-plugin
 
 大约一小时后（或本地立刻用市场的【实时发现】按钮）就能看到它。快车道条目在 UI 上**显著标注"未审核"**。
 
-**正典（进"已审核"分区）**：往 `market/catalog.json` 提一个 PR，
-把 `unreviewed` 改成 `false`。爬虫合并时会**保留**这个标记，不会把它翻回未审核。
+**正典（进"已审核"分区）**：往 `market/overrides.json` 提一个 PR，加一条：
+
+```json
+{
+  "format": 1,
+  "plugins": {
+    "你的账号/你的仓库:": { "unreviewed": false }
+  }
+}
+```
+
+**不要改 `market/catalog.json`** —— 它是爬虫每小时全量重写的派生物，改了下一轮就没了。
+（以前的机制是「改 catalog 里的 `unreviewed`，爬虫合并时保留」，那套 `merge()` 已经删掉了。）
 
 作者需要知道的约定：
 
@@ -90,10 +105,58 @@ gh repo edit --add-topic openrevo-plugin
 |---|---|
 | 插件目录 | 仓库根目录放 `manifest.json`，**或**某个子目录里放（monorepo 会扫一层，自动识别） |
 | 必填 | `manifest.json` 的 `id` / `name` / `version` / `plugin_type`。`id` 就是安装后的目录名 |
-| `plugin_type` | `skin` / `background` / `tab` / `widget` / `slot`（v0.9.1 实测枚举） |
+| `plugin_type` | `skin` / `background` / `tab` / `widget` / `slot` / `service` / `shell` / `driver`（八种） |
 | 描述 | 写清**做什么**；不要把内容写成"最好的插件"这种无法核对的话 |
 | 能力 | 由工具侧扫描填写，作者手写无效 |
 | 作者 | 目录里的作者一律取**仓库归属者**（`owner`）；manifest 的 `author` 只是自填展示名，不入目录 |
+
+---
+
+## 审核与覆写层 `market/overrides.json`
+
+**唯一**需要人工编辑的文件。`catalog.json` 只要被爬虫跑过就会被整份覆盖。
+
+键是 `owner/repo:subpath`，仓库根条目 subpath 留空：
+
+```json
+{
+  "format": 1,
+  "plugins": {
+    "LIPiston/open-revo-market:plugin-market": { "unreviewed": false },
+    "xmsjx/openrevo-plugin-power": {
+      "description": "自定义功耗墙与风扇曲线。",
+      "capabilities": ["host-runtime"],
+      "sha256": "（64 位小写 hex）"
+    },
+    "someone/broken-plugin": { "exclude": true }
+  }
+}
+```
+
+| 值 | 结果 |
+|---|---|
+| 字段省略，或为 `null` / `""` | **不覆写**，保留爬虫这轮抓到的值 |
+| 其余任何值（含 `false` / `[]` / `{}`） | 直接覆盖 |
+| `"exclude": true` | 该条**不进目录**（下架 / 拉黑） |
+
+三条容易踩的：
+
+* **`[]` 不当空处理。** `capabilities: []` 是「扫过、没检出能力」这个结论；
+  当空丢掉会退化成 `null`（没扫过），而 UI 上是两个不同的三态。要「不管它」就省略字段。
+* **键不用 `id`。** 作者改一次 manifest 里的 `id`，用 id 存键就会静默失配 ——
+  想改的那条没改上，而且不报错。
+* **写错会报错，不会静默失效。** 字段名拼错（`unreviewd`）、覆写 `repo`/`subpath`、
+  `exclude` 写成非布尔、`format` 不是 `1`，都会直接抛 `OverrideError` 并让 CI 红。
+
+`overrides.json` 的 `format` **是真会读的**（`overrides.py` 校验），用来挡住
+「把别的 JSON 误当覆写文件放到这个路径」。而 `catalog.json` **没有版本号字段** ——
+它曾经有个 `"format": 1`，但前后端都不读，改它没有任何行为变化，所以删掉了。
+
+校验覆写层：
+
+```bash
+python market/overrides.py            # 字段名 / 空白语义 / format
+```
 
 ---
 

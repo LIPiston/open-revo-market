@@ -4,8 +4,8 @@ OpenRevo 主控台里的一个 `tab` 页签：浏览第三方插件、看能力�
 
 ## 它做什么
 
-- **浏览目录**：拉取策展目录 `market/catalog.json`，按类型分组（已审核 / 未审核），支持搜索与筛选；
-  列表可滚动，超过一页自动分页（每页 12 条）。
+- **浏览目录**：拉取派生目录 `market/catalog.json`（GitHub topic 抓取 + 人工覆写层），
+  按类型分组（已审核 / 未审核），支持搜索与筛选；列表可滚动，超过一页自动分页（每页 12 条）。
 - **实时发现**：直接查 GitHub 上带 `openrevo-plugin` topic 的仓库 —— 作者打上 topic 后无需等待爬虫就能被发现。
 - **识别已安装**：通过宿主的 `get_custom_plugins` 只读命令，给已安装的插件打标签。
 - **能力披露**：列出静态扫描查到的联网 / 文件读写等能力，并把危险组合单列（如"读凭据 + 有网络"）。
@@ -53,7 +53,8 @@ invoke('install_plugin_from_url', { id, url: 'https://codeload.github.com/<repo>
 `window.open` 也被拦（没有 `allow-popups`），这些能力本来就不在插件手里。
 
 > 目录条目里如果不带 `sha256`，宿主只能校验传输完整性，**证明不了内容没被篡改**。
-> 想升级为可验证安装，请给 `catalog.json` 的条目补上 `sha256` 字段。
+> 想升级为可验证安装，请在仓库的 `market/overrides.json` 里给对应条目写 `sha256`。
+> 不要改 `catalog.json`：它每小时被爬虫整份重写。
 
 ## 安装这个市场本身
 
@@ -74,7 +75,8 @@ python build_market.py --install
 ## 收录新插件
 
 给你自己的插件仓库打上 `openrevo-plugin` topic，它就会被收录（快车道，标注"未审核"）。
-想进"已审核"分区，往 `market/catalog.json` 提一个 PR。
+想进"已审核"分区，往仓库的 `market/overrides.json` 提一个 PR，给该条目加
+`"unreviewed": false`。**不要改 `catalog.json`** —— 它每小时被爬虫整份重写，改了下一轮就没了。
 
 ## 卸载
 
