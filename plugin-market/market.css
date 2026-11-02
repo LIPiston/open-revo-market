@@ -1,0 +1,1151 @@
+/* ============================================================================
+ * OpenRevo 插件市场 · 样式
+ * 由 build_market.py 引用到 plugin-market/index.html（外链，不再内联）。
+ *
+ * 三条硬约束，改版时必须守住：
+ *
+ *  1. **自带不透明底色**。宿主把插件作为 srcDoc 注入 iframe，iframe 的
+ *     `background: transparent` 会露出宿主面板的底色；真实宿主里那块是浅色，
+ *     深色文字令牌压上去整页发白（v1.2.0 实测事故）。所以这里自己画底，
+ *     令牌与底色永远成对出现，不赌宿主背景色。
+ *
+ *  2. **宿主令牌不继承**。iframe 是独立文档，:root 变量不会跨文档继承，
+ *     因此这里自带一份完整令牌面；`html[data-theme]` 只用来跟随宿主主题。
+ *
+ *  3. **列数跟着内容区，不跟视口**。宿主面板宽度与视口无关（150% DPI 下
+ *     1444 physical 的主窗只给插件约 791 CSS px；独立视窗又能拉到 1000+），
+ *     所以用 container query 而不是视口 @media 断点。
+ * ========================================================================== */
+
+:root {
+  /* --- 宿主同名令牌（v0.9.x index-*.css）--- */
+  --surface-base: rgba(11, 14, 20, .94);
+  --surface-card: rgba(22, 27, 34, .75);
+  --surface-card-hover: rgba(33, 38, 45, .85);
+  --surface-card-active: rgba(40, 46, 56, .92);
+  --surface-pill: rgba(255, 255, 255, .05);
+  --surface-pill-hover: rgba(255, 255, 255, .1);
+  --surface-sunken: rgba(0, 0, 0, .32);
+  --surface-overlay: rgba(15, 23, 42, .85);
+  --surface-badge: rgba(255, 255, 255, .06);
+  --border-subtle: rgba(255, 255, 255, .08);
+  --border-medium: rgba(255, 255, 255, .15);
+  --border-highlight: rgba(255, 255, 255, .3);
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+  --text-dim: #64748b;
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+  --transition-fast: .15s cubic-bezier(.4, 0, .2, 1);
+  --transition-normal: .25s cubic-bezier(.4, 0, .2, 1);
+  --status-ok: #10b981;
+  --status-ok-dim: rgba(16, 185, 129, .15);
+  --status-warn: #f59e0b;
+  --status-warn-dim: rgba(245, 158, 11, .15);
+  --status-error: #ef4444;
+  --status-error-dim: rgba(239, 68, 68, .15);
+  --status-info: #38bdf8;
+  --status-info-dim: rgba(56, 189, 248, .15);
+  --color-brand: #6366f1;
+  --accent: #6366f1;
+  --grad-brand: linear-gradient(180deg, #7c7ff7, #5b5ee8);
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+  --font-mono: "JetBrains Mono", "Cascadia Mono", Consolas, monospace;
+
+  /* --- 市场自有令牌：底色与层次（不透明，绝不依赖宿主）--- */
+  --app-bg: #0a0d13;
+  --app-bg-top: #101623;
+  --app-glow: rgba(99, 102, 241, .13);
+  --card-bg: #121822;
+  --card-bg-hover: #171e2b;
+  --card-border: rgba(255, 255, 255, .07);
+  --card-border-hover: rgba(255, 255, 255, .16);
+  --head-bg: rgba(12, 16, 24, .86);
+  --shadow-card: 0 1px 0 rgba(255, 255, 255, .03) inset;
+  --shadow-pop: 0 18px 48px rgba(0, 0, 0, .55);
+}
+
+/* 浅色：宿主目前只有 cyber / mono，但保留一份可用面，别让未来切主题时整页发白 */
+html[data-theme="light"] {
+  --surface-base: #ffffff;
+  --surface-card: #ffffff;
+  --surface-card-hover: #f5f8fd;
+  --surface-card-active: #e9eff8;
+  --surface-pill: rgba(15, 23, 42, .05);
+  --surface-pill-hover: rgba(15, 23, 42, .1);
+  --surface-sunken: rgba(15, 23, 42, .06);
+  --surface-overlay: #ffffff;
+  --surface-badge: rgba(15, 23, 42, .06);
+  --border-subtle: rgba(15, 23, 42, .1);
+  --border-medium: rgba(15, 23, 42, .18);
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
+  --text-dim: #94a3b8;
+  --app-bg: #f4f7fc;
+  --app-bg-top: #ffffff;
+  --app-glow: rgba(99, 102, 241, .1);
+  --card-bg: #ffffff;
+  --card-bg-hover: #f7f9fd;
+  --card-border: rgba(15, 23, 42, .1);
+  --card-border-hover: rgba(15, 23, 42, .2);
+  --head-bg: rgba(255, 255, 255, .9);
+  --shadow-card: 0 1px 2px rgba(15, 23, 42, .05);
+  --shadow-pop: 0 18px 44px rgba(15, 23, 42, .18);
+}
+
+/* mono：宿主整套去饱和（连功能色都退成灰阶），彩色规则必须单独覆盖，
+   只调 --accent 不够 —— 下面带硬编码色相的规则全部要压回灰阶。 */
+html[data-theme="mono"] {
+  --accent: #e2e8f0;
+  --color-brand: #cbd5e1;
+  --grad-brand: linear-gradient(180deg, #3a4048, #2a2f36);
+  --status-ok-dim: rgba(255, 255, 255, .08);
+  --status-warn-dim: rgba(255, 255, 255, .08);
+  --status-info-dim: rgba(255, 255, 255, .08);
+  --status-error-dim: rgba(255, 255, 255, .08);
+  --app-bg: #0b0d10;
+  --app-bg-top: #14171c;
+  --app-glow: rgba(255, 255, 255, .05);
+  --card-bg: #131720;
+  --card-bg-hover: #181d26;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* 兜底：内联 SVG 没有尺寸会把父容器撑爆（页脚那颗警示图标曾撑满整页）。
+   具体组件规则写在后面、同优先级，会覆盖这里。 */
+.mkt svg, .mkt-scrim svg { width: 13px; height: 13px; flex-shrink: 0; }
+
+html, body {
+  height: 100%;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.5;
+  overflow: hidden;
+  /* 不透明底：iframe 透明时露出的宿主底色不可控，见文件头说明。 */
+  background-color: var(--app-bg);
+}
+
+body {
+  background-image:
+    radial-gradient(1100px 420px at 10% -10%, var(--app-glow) 0%, transparent 62%),
+    linear-gradient(180deg, var(--app-bg-top) 0%, var(--app-bg) 46%);
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* #app 必须显式撑满：少了这一层 `.mkt{height:100%}` 会退化成 auto，
+   .mkt-body 的 overflow:auto 永不触发（实测 scrollHeight == clientHeight）。 */
+#app { height: 100%; min-height: 0; display: flex; flex-direction: column; }
+
+.mkt {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0%;
+  min-height: 0;
+}
+
+/* ------------------------------------------------------------------ 顶栏 */
+.mkt-top {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 13px 16px 10px;
+  background: var(--head-bg);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--border-subtle);
+  z-index: 2;
+}
+
+.mkt-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+/* 搜索框是主入口，吃掉剩余宽度；按钮固定宽度不换行 */
+.mkt-search {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 120px;
+  display: flex;
+  align-items: center;
+}
+.mkt-search svg {
+  position: absolute;
+  left: 11px;
+  width: 14px;
+  height: 14px;
+  color: var(--text-dim);
+  pointer-events: none;
+  transition: color var(--transition-fast);
+}
+.mkt-search input {
+  width: 100%;
+  height: 34px;
+  padding: 0 12px 0 32px;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--text-primary);
+  background: var(--surface-pill);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  outline: none;
+  user-select: text;
+  -webkit-user-select: text;
+  transition: border-color var(--transition-fast), background var(--transition-fast), box-shadow var(--transition-fast);
+}
+.mkt-search input::placeholder { color: var(--text-dim); }
+.mkt-search input:focus {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: var(--surface-pill-hover);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.mkt-search input::-webkit-search-cancel-button { -webkit-appearance: none; }
+.mkt-search:focus-within svg { color: var(--text-muted); }
+
+.mkt-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+
+/* ---------------------------------------------------------------- 按钮 */
+.mkt-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: .01em;
+  color: var(--text-muted);
+  background: var(--surface-pill);
+  border: 1px solid var(--border-subtle);
+  border-radius: 9px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--transition-fast), border-color var(--transition-fast),
+              color var(--transition-fast), transform var(--transition-fast);
+}
+.mkt-btn:hover {
+  background: var(--surface-pill-hover);
+  border-color: var(--border-medium);
+  color: var(--text-primary);
+}
+.mkt-btn:active { transform: translateY(1px); }
+.mkt-btn:focus-visible {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.mkt-btn:disabled { opacity: .45; cursor: default; transform: none; }
+.mkt-btn svg { width: 14px; height: 14px; flex-shrink: 0; }
+
+/* 图标按钮：窄屏下只留图标，靠 title 说明 */
+.mkt-btn.icon { width: 34px; padding: 0; }
+
+.mkt-btn.primary {
+  color: #fff;
+  background: var(--grad-brand);
+  border-color: color-mix(in srgb, #7c7ff7 70%, transparent);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .16) inset, 0 6px 16px -6px color-mix(in srgb, var(--accent) 70%, transparent);
+}
+.mkt-btn.primary:hover {
+  background: var(--grad-brand);
+  filter: brightness(1.08);
+  border-color: color-mix(in srgb, #8b8efb 80%, transparent);
+  color: #fff;
+}
+.mkt-btn.danger {
+  color: var(--status-error);
+  border-color: color-mix(in srgb, var(--status-error) 40%, transparent);
+  background: var(--status-error-dim);
+}
+.mkt-btn.danger:hover {
+  color: #fff;
+  background: color-mix(in srgb, var(--status-error) 30%, transparent);
+  border-color: color-mix(in srgb, var(--status-error) 60%, transparent);
+}
+.mkt-btn.sm { height: 27px; padding: 0 10px; font-size: 11px; border-radius: 7px; }
+.mkt-btn.sm svg { width: 12px; height: 12px; }
+
+/* mono 下强调按钮退成中性高亮，不保留紫色 */
+html[data-theme="mono"] .mkt-btn.primary {
+  color: var(--text-primary);
+  background: var(--surface-pill-hover);
+  border-color: var(--border-highlight);
+  box-shadow: none;
+}
+html[data-theme="mono"] .mkt-btn.primary:hover { background: var(--surface-card-active); color: #fff; }
+html[data-theme="mono"] .mkt-btn.danger {
+  background: var(--surface-pill);
+  border-color: var(--border-medium);
+}
+
+/* ------------------------------------------------------- 筛选（chip 行） */
+.mkt-filterbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.mkt-sources {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 1px;
+}
+.mkt-sources::-webkit-scrollbar { display: none; }
+
+.mkt-src {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 27px;
+  padding: 0 10px;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+}
+.mkt-src:hover { color: var(--text-secondary); background: var(--surface-pill); }
+.mkt-src .n {
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+  background: var(--surface-badge);
+  border-radius: var(--radius-full);
+  padding: 0 5px;
+  min-width: 17px;
+  text-align: center;
+  line-height: 15px;
+  transition: inherit;
+}
+.mkt-src.active {
+  color: var(--text-primary);
+  background: var(--surface-card-active);
+  border-color: var(--border-medium);
+}
+.mkt-src.active .n {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
+}
+html[data-theme="mono"] .mkt-src.active .n { background: var(--surface-pill-hover); }
+
+/* 目录/宿主状态：一行，可省略 —— 不占第二行 */
+.mkt-meta {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  font-size: 10.5px;
+  color: var(--text-dim);
+}
+.mkt-meta .dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--status-ok);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-ok) 18%, transparent);
+  flex-shrink: 0;
+}
+.mkt-meta .dot.warn { background: var(--status-warn); box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-warn) 18%, transparent); }
+.mkt-meta .dot.err { background: var(--status-error); box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-error) 18%, transparent); }
+.mkt-meta .spacer { flex: 1; }
+.mkt-meta .txt {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.mkt-meta code {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  background: var(--surface-badge);
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  user-select: text;
+  -webkit-user-select: text;
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------- 内容区 */
+/* 内容区是容器：列数按它的内联尺寸算，与视口无关。
+   `.mkt-body` 的 padding 与滚动条会吃掉宽度，所以容器就是这个盒子的内容宽度。 */
+.mkt-body {
+  flex: 1 1 0%;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 14px 16px 4px;
+  scrollbar-gutter: stable;
+  container-type: inline-size;
+  container-name: mktbody;
+}
+.mkt-body::-webkit-scrollbar { width: 8px; }
+.mkt-body::-webkit-scrollbar-track { background: transparent; }
+.mkt-body::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, .14);
+  border-radius: var(--radius-full);
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+.mkt-body::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, .28); background-clip: content-box; }
+html[data-theme="light"] .mkt-body::-webkit-scrollbar-thumb { background: rgba(15, 23, 42, .18); background-clip: content-box; }
+
+.mkt-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0 9px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .03em;
+  color: var(--text-muted);
+}
+.mkt-section-title::before {
+  content: "";
+  width: 3px; height: 11px;
+  border-radius: var(--radius-full);
+  background: var(--accent);
+  flex-shrink: 0;
+}
+.mkt-section-title.unreviewed::before { background: var(--status-warn); }
+.mkt-section-title::after { content: ""; flex: 1; height: 1px; background: var(--border-subtle); }
+.mkt-section-title + .mkt-grid { margin-bottom: 14px; }
+
+/* 网格列数由容器宽度决定（见文件头第 3 条）：
+     ≤560  →  1 列（独立视窗被拖窄）
+     ≥  0  →  按 --mkt-card-min 自动填充，791px 下 3 列、1000px 下 4 列、1280px 下 5 列
+   `min(100%, …)` 保证容器再窄也不会出现「一列都放不下」的横向溢出。 */
+.mkt-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--mkt-card-min, 232px)), 1fr));
+  gap: 10px;
+}
+
+@container mktbody (min-width: 1160px) { .mkt-grid { --mkt-card-min: 250px; } }
+@container mktbody (max-width: 560px)  { .mkt-grid { --mkt-card-min: 100%; } }
+
+/* ------------------------------------------------------------------- 卡片 */
+.mkt-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 13px 14px 12px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  transition: background var(--transition-fast), border-color var(--transition-fast),
+              transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+.mkt-card:hover {
+  background: var(--card-bg-hover);
+  border-color: var(--card-border-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px -14px rgba(0, 0, 0, .7);
+}
+/* 已安装：左侧强调条，不用整块绿框（绿框太吵，且和「已审核」争注意力） */
+.mkt-card.installed { padding-left: 15px; }
+.mkt-card.installed::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 12px; bottom: 12px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--status-ok);
+  opacity: .85;
+}
+.mkt-card.busy { opacity: .6; pointer-events: none; }
+
+.mkt-card-head { display: flex; align-items: flex-start; gap: 10px; }
+
+/* 形态图标：每个 plugin_type 一个色相，卡头与徽标同源 */
+.mkt-avatar {
+  --h: 235;
+  width: 34px; height: 34px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  color: hsl(var(--h) 90% 78%);
+  background: linear-gradient(150deg,
+    hsl(var(--h) 80% 60% / .3),
+    hsl(var(--h) 80% 55% / .08));
+  border: 1px solid hsl(var(--h) 80% 60% / .3);
+}
+.mkt-avatar svg { width: 17px; height: 17px; }
+html[data-theme="mono"] .mkt-avatar {
+  color: var(--text-secondary);
+  background: var(--surface-pill);
+  border-color: var(--border-subtle);
+}
+
+.mkt-card-titles { min-width: 0; flex: 1; }
+.mkt-card-name {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .01em;
+  color: var(--text-primary);
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mkt-card-id {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 1px;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* ------------------------------------------------------------------ 徽标 */
+.mkt-badges { display: flex; flex-wrap: wrap; gap: 4px; }
+
+.mkt-badge {
+  --h: 220;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 7px;
+  font-size: 9.5px;
+  font-weight: 600;
+  line-height: 1.65;
+  letter-spacing: .01em;
+  border-radius: var(--radius-full);
+  color: var(--text-muted);
+  background: var(--surface-badge);
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.mkt-badge svg { width: 9px; height: 9px; }
+
+/* 形态配色：只按 plugin_type 取值上色，不据此推断任何运行期行为 */
+.mkt-badge[class*="type-"] {
+  color: hsl(var(--h) 88% 76%);
+  background: hsl(var(--h) 80% 58% / .14);
+  border-color: hsl(var(--h) 80% 58% / .32);
+}
+.mkt-badge.type-skin { --h: 235; }
+.mkt-badge.type-background { --h: 38; }
+.mkt-badge.type-tab { --h: 200; }
+.mkt-badge.type-widget { --h: 160; }
+.mkt-badge.type-slot { --h: 265; }
+.mkt-badge.type-service { --h: 350; }
+.mkt-badge.type-shell { --h: 172; }
+.mkt-badge.type-driver { --h: 24; }
+
+.mkt-badge.ok {
+  color: var(--status-ok);
+  background: var(--status-ok-dim);
+  border-color: color-mix(in srgb, var(--status-ok) 35%, transparent);
+}
+.mkt-badge.warn {
+  color: var(--status-warn);
+  background: var(--status-warn-dim);
+  border-color: color-mix(in srgb, var(--status-warn) 35%, transparent);
+}
+.mkt-badge.info {
+  color: var(--status-info);
+  background: var(--status-info-dim);
+  border-color: color-mix(in srgb, var(--status-info) 35%, transparent);
+}
+
+/* mono：宿主整套去饱和，彩色的形态/状态徽标必须一起退灰 */
+html[data-theme="mono"] .mkt-badge[class*="type-"],
+html[data-theme="mono"] .mkt-badge.ok,
+html[data-theme="mono"] .mkt-badge.warn,
+html[data-theme="mono"] .mkt-badge.info,
+html[data-theme="mono"] .mkt-cap.ok,
+html[data-theme="mono"] .mkt-cap.warn {
+  color: var(--text-secondary);
+  background: var(--surface-badge);
+  border-color: var(--border-subtle);
+}
+
+.mkt-card-desc {
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--text-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 36px;
+}
+.mkt-card-desc.empty { color: var(--text-dim); font-style: italic; }
+
+/* -------------------------------------------------- 能力摘要（始终可见） */
+/* 安全信息不折叠：卡片上永远有一行「扫没扫过 / 检出什么」。
+   清单自述的细节才放进 <details>，避免每张卡片都铺 6 行样板字。 */
+.mkt-cap {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 6px 9px;
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  background: var(--surface-sunken);
+  border: 1px solid transparent;
+  border-radius: 7px;
+}
+.mkt-cap svg { width: 12px; height: 12px; flex-shrink: 0; margin-top: 1px; color: var(--text-dim); }
+.mkt-cap b { color: var(--text-secondary); font-weight: 600; }
+.mkt-cap.ok { border-color: color-mix(in srgb, var(--status-ok) 22%, transparent); }
+.mkt-cap.ok svg { color: var(--status-ok); }
+/* 「未扫描」不是一个发现：留一行安静的浅底文字，不用告警框抢注意力 */
+.mkt-cap.quiet {
+  padding-left: 2px;
+  background: transparent;
+  border-color: transparent;
+}
+.mkt-cap.quiet b { color: var(--text-muted); }
+.mkt-cap.quiet svg { color: var(--text-dim); }
+.mkt-cap.warn {
+  color: var(--text-secondary);
+  border-color: color-mix(in srgb, var(--status-warn) 30%, transparent);
+  background: color-mix(in srgb, var(--status-warn) 8%, transparent);
+}
+.mkt-cap.warn svg { color: var(--status-warn); }
+
+/* 能力风险：单独一行小警示，不塞进摘要挤成一团 */
+.mkt-risk {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: color-mix(in srgb, var(--status-warn) 88%, var(--text-primary));
+}
+.mkt-risk svg { width: 12px; height: 12px; flex-shrink: 0; margin-top: 2px; color: var(--status-warn); }
+
+/* --------------------------------------------------- 清单声明（可折叠） */
+.mkt-more { margin-top: -1px; }
+.mkt-more > summary {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-dim);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  padding: 2px 0;
+  transition: color var(--transition-fast);
+}
+.mkt-more > summary::-webkit-details-marker { display: none; }
+.mkt-more > summary:hover { color: var(--text-secondary); }
+.mkt-more > summary svg:first-child { width: 11px; height: 11px; flex-shrink: 0; }
+.mkt-more > summary .chev {
+  width: 11px; height: 11px;
+  margin-left: auto;
+  transition: transform var(--transition-fast);
+}
+.mkt-more[open] > summary { color: var(--text-secondary); }
+.mkt-more[open] > summary .chev { transform: rotate(180deg); }
+.mkt-more-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 7px;
+  animation: mkt-fade .14s ease;
+}
+
+/* --------------------------------------------------------- 披露（键值行） */
+.mkt-disc { display: flex; flex-direction: column; gap: 3px; }
+.mkt-disc-item {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  padding: 4px 8px;
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  background: var(--surface-sunken);
+  border-radius: 6px;
+  border-left: 2px solid var(--border-medium);
+}
+.mkt-disc-item b { color: var(--text-secondary); font-weight: 600; }
+.mkt-disc-item svg { width: 11px; height: 11px; flex-shrink: 0; margin-top: 1px; color: var(--text-dim); }
+.mkt-disc-item.warn { border-left-color: var(--status-warn); }
+.mkt-disc-item.warn svg { color: var(--status-warn); }
+.mkt-disc-item.info { border-left-color: color-mix(in srgb, var(--status-info) 55%, transparent); }
+.mkt-disc-item.info svg { color: var(--status-info); }
+.mkt-disc-none { font-size: 10px; color: var(--text-dim); }
+
+/* ------------------------------------------------------------ 卡片底部 */
+.mkt-card-foot {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: auto;
+  padding-top: 9px;
+  border-top: 1px solid var(--border-subtle);
+}
+.mkt-card-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  color: var(--text-dim);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mkt-card-stat svg { width: 10px; height: 10px; flex-shrink: 0; }
+.mkt-card-foot .spacer { flex: 1; flex-basis: 6px; }
+
+/* 宿主没有安装 IPC：说明一句就够，不做整块警示 */
+.mkt-card-hint {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: -3px;
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--text-dim);
+}
+.mkt-card-hint svg { width: 11px; height: 11px; flex-shrink: 0; }
+
+/* ------------------------------------------------------- 生命周期（已装） */
+/* 启用/停用是两个幂等动作，不是开关：宿主不返回开关态，
+   画成 toggle 就等于替宿主断言一个市场并不知道的状态。 */
+.mkt-lifecycle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border-subtle);
+}
+.mkt-lifecycle .spacer { flex: 1; min-width: 4px; }
+.mkt-lifecycle-svc {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  color: var(--text-dim);
+  min-width: 0;
+}
+.mkt-lifecycle-svc .dot {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--status-ok);
+  flex-shrink: 0;
+}
+.mkt-lifecycle-svc .dot.err { background: var(--status-error); }
+.mkt-lifecycle-svc > span[data-svc-status] {
+  max-width: 132px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ 空态 */
+.mkt-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 56px 20px;
+  color: var(--text-dim);
+  text-align: center;
+}
+.mkt-empty svg { width: 32px; height: 32px; opacity: .5; }
+.mkt-empty .t { font-size: 13px; font-weight: 600; color: var(--text-muted); }
+.mkt-empty .d { font-size: 11.5px; line-height: 1.7; max-width: 460px; }
+.mkt-empty code {
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  background: var(--surface-badge);
+  padding: 1px 5px;
+  border-radius: var(--radius-xs);
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.mkt-skel {
+  height: 176px;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(100deg, var(--card-bg) 30%, var(--card-bg-hover) 50%, var(--card-bg) 70%);
+  background-size: 220% 100%;
+  border: 1px solid var(--card-border);
+  animation: mkt-shimmer 1.3s linear infinite;
+}
+@keyframes mkt-shimmer { from { background-position: 160% 0; } to { background-position: -60% 0; } }
+
+.mkt-spin { animation: mkt-rot 1s linear infinite; }
+@keyframes mkt-rot { to { transform: rotate(360deg); } }
+
+/* ------------------------------------------------------------------ 提示条 */
+.mkt-note {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 8px 11px;
+  margin-bottom: 10px;
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--status-warn) 9%, transparent);
+  border: 1px solid color-mix(in srgb, var(--status-warn) 26%, transparent);
+  border-radius: 9px;
+}
+.mkt-note svg { width: 13px; height: 13px; flex-shrink: 0; margin-top: 2px; color: var(--status-warn); }
+.mkt-note b { color: var(--text-secondary); font-weight: 600; }
+.mkt-note code {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-secondary);
+  user-select: text;
+  -webkit-user-select: text;
+}
+.mkt-note.plain {
+  background: var(--surface-sunken);
+  border-color: var(--border-subtle);
+}
+.mkt-note.plain svg { color: var(--text-dim); }
+html[data-theme="mono"] .mkt-note { background: var(--surface-sunken); border-color: var(--border-subtle); }
+html[data-theme="mono"] .mkt-note svg { color: var(--text-dim); }
+
+/* ------------------------------------------------------------------ 弹窗 */
+.mkt-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, .62);
+  backdrop-filter: blur(5px);
+  animation: mkt-fade .15s ease;
+}
+@keyframes mkt-fade { from { opacity: 0; } to { opacity: 1; } }
+
+.mkt-modal {
+  width: min(660px, 100%);
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--app-bg);
+  background-image: linear-gradient(180deg, var(--app-bg-top) 0%, var(--app-bg) 34%);
+  border: 1px solid var(--border-medium);
+  border-radius: 14px;
+  box-shadow: var(--shadow-pop);
+  overflow: hidden;
+  animation: mkt-rise .18s cubic-bezier(.16, 1, .3, 1);
+}
+@keyframes mkt-rise { from { opacity: 0; transform: translateY(8px) scale(.99); } to { opacity: 1; transform: none; } }
+
+.mkt-modal-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 15px 16px 13px;
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+.mkt-modal-head .mkt-avatar { width: 36px; height: 36px; }
+.mkt-modal-head .t { font-size: 14.5px; font-weight: 700; line-height: 1.35; }
+.mkt-modal-head .s {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-dim);
+  margin-top: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.mkt-modal-head .mkt-btn { flex-shrink: 0; }
+
+.mkt-modal-body {
+  padding: 14px 16px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+.mkt-modal-body::-webkit-scrollbar { width: 8px; }
+.mkt-modal-body::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, .16);
+  border-radius: var(--radius-full);
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+.mkt-block { display: flex; flex-direction: column; gap: 8px; }
+.mkt-block > .h {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .02em;
+  color: var(--text-muted);
+}
+.mkt-block > .h svg { color: var(--text-dim); }
+
+/* 步骤：数字徽章 + 说明，弹窗里只留必须的动作 */
+.mkt-steps { display: flex; flex-direction: column; gap: 9px; counter-reset: s; }
+.mkt-step { display: flex; gap: 9px; align-items: flex-start; }
+.mkt-step::before {
+  counter-increment: s;
+  content: counter(s);
+  width: 18px; height: 18px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 700;
+  color: var(--text-secondary);
+  background: var(--surface-pill-hover);
+  border: 1px solid var(--border-subtle);
+  border-radius: 50%;
+}
+.mkt-step .tx { font-size: 11.5px; line-height: 1.6; color: var(--text-muted); padding-top: 1px; }
+.mkt-step .tx b { color: var(--text-secondary); font-weight: 600; }
+.mkt-step code {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-secondary);
+  background: var(--surface-badge);
+  padding: 1px 5px;
+  border-radius: var(--radius-xs);
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.mkt-cmd {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 11px;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+.mkt-cmd svg { width: 13px; height: 13px; flex-shrink: 0; margin-top: 3px; color: var(--text-dim); }
+.mkt-cmd code {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.65;
+  color: var(--text-secondary);
+  word-break: break-all;
+  white-space: pre-wrap;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.mkt-modal-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--app-bg-top) 60%, transparent);
+  flex-shrink: 0;
+}
+.mkt-modal-foot .spacer { flex: 1; }
+
+/* 备用路径：默认收起，别把主流程挤满 */
+.mkt-fallback { border-top: 1px dashed var(--border-subtle); padding-top: 10px; }
+.mkt-fallback > summary {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11px; color: var(--text-muted); cursor: pointer;
+  list-style: none; user-select: none;
+}
+.mkt-fallback > summary::-webkit-details-marker { display: none; }
+.mkt-fallback > summary:hover { color: var(--text-secondary); }
+.mkt-fallback > summary svg { width: 12px; height: 12px; flex-shrink: 0; }
+.mkt-fallback[open] > summary { color: var(--text-secondary); margin-bottom: 8px; }
+
+.mkt-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 8px 10px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+.mkt-check:hover { border-color: var(--border-medium); color: var(--text-secondary); }
+.mkt-check input[type="checkbox"] {
+  flex-shrink: 0;
+  width: 14px; height: 14px;
+  margin: 2px 0 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.mkt-check span b { color: var(--text-secondary); font-weight: 600; }
+
+/* ------------------------------------------------------------------ 页脚 */
+.mkt-footer {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px 11px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 10px;
+  line-height: 1.55;
+  color: var(--text-dim);
+  background: color-mix(in srgb, var(--app-bg) 55%, transparent);
+}
+.mkt-footer b { color: var(--text-muted); font-weight: 600; }
+.mkt-footer svg { width: 12px; height: 12px; flex-shrink: 0; color: var(--status-warn); opacity: .8; }
+.mkt-footer .txt {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.mkt-footer .spacer { flex: 1; }
+.mkt-footer code {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--text-muted);
+  background: var(--surface-badge);
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ 翻页 */
+/* 滚动条与翻页并存：滚动是连续浏览，翻页是「一段一段」看，长目录里后者省事。 */
+.mkt-pager {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.mkt-pager .spacer { flex: 1 1 auto; }
+.mkt-pager .pg {
+  min-width: 27px;
+  height: 26px;
+  padding: 0 8px;
+  font: inherit;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  background: var(--surface-pill);
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.mkt-pager .pg:hover:not(:disabled) { color: var(--text-primary); background: var(--surface-pill-hover); border-color: var(--border-medium); }
+.mkt-pager .pg.active {
+  color: #fff;
+  background: var(--grad-brand);
+  border-color: color-mix(in srgb, #7c7ff7 70%, transparent);
+  font-weight: 700;
+}
+html[data-theme="mono"] .mkt-pager .pg.active {
+  color: var(--text-primary);
+  background: var(--surface-card-active);
+  border-color: var(--border-highlight);
+}
+.mkt-pager .pg:disabled { opacity: .3; cursor: not-allowed; }
+.mkt-pager .pg-gap { padding: 0 3px; color: var(--text-dim); font-size: 11px; }
+.mkt-pager .pg-info { font-variant-numeric: tabular-nums; font-size: 10.5px; color: var(--text-dim); }
+
+/* ------------------------------------------------------------------ toast */
+.mkt-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 20px;
+  z-index: 90;
+  transform: translateX(-50%);
+  max-width: min(560px, 88vw);
+  padding: 9px 16px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--app-bg-top) 92%, transparent);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-full);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, .55);
+  backdrop-filter: blur(10px);
+  animation: mkt-toast-in .18s cubic-bezier(.16, 1, .3, 1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@keyframes mkt-toast-in { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+.mkt-toast.err {
+  color: #fee2e2;
+  border-color: color-mix(in srgb, var(--status-error) 45%, transparent);
+}
+html[data-theme="mono"] .mkt-toast.err { color: var(--text-primary); border-color: var(--border-highlight); }
+
+/* ------------------------------------------------------------- 窄屏收敛 */
+/* 视口断点只用来收按钮文字与内边距 —— **列数不在这里定**，列数看 .mkt-body
+   的容器宽度（见 .mkt-grid 上的 @container）。曾经这里写死 `grid-template-columns: 1fr`，
+   导致 791px 的常规面板被压成单列；那正是「一屏只看得见两个」的另一半原因。 */
+@media (max-width: 860px) {
+  .mkt-btn.labeled { width: 34px; padding: 0; }
+  .mkt-btn.labeled .lb { display: none; }
+  .mkt-meta .opt { display: none; }
+}
+@media (max-width: 640px) {
+  .mkt-top { padding: 10px 12px 8px; }
+  .mkt-body { padding: 12px 12px 4px; }
+  .mkt-footer { padding: 8px 12px 10px; }
+  .mkt-pager { padding: 7px 12px; }
+  .mkt-pager .pg-info { display: none; }
+}
+
+/* 卡片在窄列下的自理：徽章与卡底按钮允许折行，不叠字、不溢出 */
+.mkt-card-foot { flex-wrap: wrap; row-gap: 6px; }
+.mkt-lifecycle-svc { flex-wrap: wrap; }
+/* 独立视窗被拖到很窄时，服务状态那行不再强撑宽度 */
+@container mktbody (max-width: 420px) {
+  .mkt-lifecycle-svc > span[data-svc-status] { max-width: none; }
+  .mkt-card-desc { min-height: 0; }
+}

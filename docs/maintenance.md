@@ -16,7 +16,7 @@ open-revo-market\
 │   ├── crawl_topic.py          # topic 爬虫（末尾叠加覆写层）
 │   ├── validate_catalog.py     # 目录校验 E1–E15
 │   └── tests\                  # 覆写层单元测试
-├── build_market.py             # 构建器（单文件产物 + 自检）
+├── build_market.py             # 构建器（多文件产物 + 自检）
 ├── plugin-market\              # ★ 构建产物（入库，可直接装）
 ├── _tools\                     # 安装 / 验收 / 预览 / 出图
 └── docs\                       # 文档（见根 README 的导航）
@@ -32,21 +32,25 @@ python build_market.py --check    # 只做产物自检，不写文件
 python build_market.py --install  # 构建并装到 %APPDATA%\OpenRevo\plugins\plugin-market\
 ```
 
-构建把三个源文件内联成**单文件** `plugin-market/index.html`，同时生成 `manifest.json`，并把 `market/PLUGIN_README.md` 复制成 `plugin-market/README.md`（装进用户插件目录给终端用户看）。
+构建把 `market/src/` 下的三个源文件组装成**多文件**产物：`index.html`（骨架，只外链下面两个）+ `market.css` + `market.js`，另生成 `manifest.json`，并把 `market/PLUGIN_README.md` 复制成 `plugin-market/README.md`（装进用户插件目录给终端用户看）。
 
-**`market/catalog.json` 也会被整份内联进产物**，作为 `const SEED` —— 在线目录拉不到时的兜底数据。所以「市场里显示的兜底条目」是**上次构建时**的目录快照，不是当前的：改了 `catalog.json` 必须重新 `python build_market.py`，产物里的兜底才会跟着变。
+**`market/catalog.json` 也会被整份内联进 `market.js`**，作为 `const SEED` —— 在线目录拉不到时的兜底数据。所以「市场里显示的兜底条目」是**上次构建时**的目录快照，不是当前的：改了 `catalog.json` 必须重新 `python build_market.py`，产物里的兜底才会跟着变。
 
-**产物必须单文件**：宿主用 `srcDoc` 注入，基准 URL 是宿主文档，任何 `<link rel=stylesheet>` / `<script src>` / `<img src="assets/…">` / `@import` 都会 404。构建期会断言零外部引用。
+**为什么可以外链**：宿主 0.9.5 实测 `tab` 插件的基准 URL 是插件目录，`<link rel=stylesheet>` / `<script src>` / 相对 `fetch()` 都能取到（`docs/host-contract.md` §实测：外部资源）。所以样式和逻辑不必再内联。构建期反过来断言「**只**引用 `market.css` 与 `market.js`」—— 多引一个文件或在 CSS 里写 `@import` 都会失败。
 
-`--check` 做的自检包括：零外部引用、占位符已替换、`market.js` 里没有硬编码宿主版本号（能力必须运行时探测）。
+**`manifest.json` 必须带 `window`**：缺了它，独立视窗用宿主默认的 240×320 且没有标题栏 —— 用户只能去任务栏结束宿主进程。构建期断言 `window.decorations === true` 与 `resizable === true`。
+
+`--check` 做的自检包括：产物五个文件齐全、`index.html` 只引用那两个资源、占位符已替换、`SEED` 已内联、`manifest.window` 可关窗、`market.js` 里没有硬编码宿主版本号（能力必须运行时探测）、`install_plugin_from_url` 的参数带 `id`+`url`+`archiveSubpath()`、以及实时发现不再有 `data-act="live"` 按钮且存在 `maybeAutoLive()`。
 
 ## 目录与覆写层
 
 ```
 别人给仓库打 topic ──► 爬虫（每小时 / 可手动）──► overrides.json 叠加 ──► catalog.json ──► 市场页签
                           ↑                                                     │
-                    「实时发现」直接查 GitHub，不等爬虫 ◄───────────────────────┘
+                  实时发现（切到页签自动跑一次）直接查 GitHub ◄──────────────────┘
 ```
+
+实时发现只补「目录里还没有的仓库」，查到的条目带 `data-live` 标记、单独计卡。它**不写回** `catalog.json` —— 别人看到的仍是爬虫那轮的结果。结果缓存 5 分钟（跨 tab 与独立视窗共享，因为是 `localStorage`），并有一把 30 秒软锁防止两个上下文同时打 GitHub。
 
 `catalog.json` 是**纯派生物**：爬虫每轮按 topic 全量重抓、覆盖整份文件；人工判断（审核标记、字段覆写、`sha256`、下架）一律写在 `overrides.json`，抓完之后无条件叠加。
 
@@ -122,12 +126,13 @@ bash _tools/market-verify.sh mono
 
 默认跑**两种宿主 mock**（能力齐全 / 无安装 IPC）：
 
-- `ready` 为真，**卡片数精确等于 `min(本地 catalog.json 条数, 12)`** —— 目录不超过一页时整份都要出现，超过一页时等于每页条数。写成「> 0」会让「目录整个拉丢了」和「目录真的只有 1 条」看起来一样；
+- `ready` 为真，**目录卡片数精确等于 `min(本地 catalog.json 条数, 12)`** —— 目录不超过一页时整份都要出现，超过一页时等于每页条数。写成「> 0」会让「目录整个拉丢了」和「目录真的只有 1 条」看起来一样。**实时发现条目单独计数**（卡片带 `data-live`）：它现在自动触发，会在目录之外再插若干张卡，混在一起数就再也断言不了目录完整性了；
 - **JS 错误为 0**；
 - 能力齐全：点【安装】→ 弹窗 → 点【立即安装】→ 真发 `install_plugin_from_url`，且 `usedNativeConfirm === false`（防止有人改回 `window.confirm`）；
 - 能力齐全：`uninstall_ok` —— `uninstall_plugin` 真被调用、参数是 `id` 且无 `pluginId`、弹窗关闭；
 - 无安装 IPC：弹窗打开且给出含 `plugins` 路径的可粘贴命令；
-- 「实时发现」能点且不抛异常；
+- **实时发现是自动的**：UI 上**没有** `[data-act="live"]` 按钮，且**未点击任何东西**就出现了 `.mkt-note` 横幅。只判「有横幅」不够 —— 按钮被加回来也能有横幅；
+- **自适应列数**：把 iframe 拉到 1240 / 1000 / 840 / 600 / 460 五档，逐个量 `grid-template-columns` 的轨道数 —— 最宽必须 4–5 列、约 1000px 必须 ≥3 列、最窄必须落回 1 列、列数随宽度单调递减、任何一档都不许横向溢出。列数由**容器宽度**决定（`.mkt-body` 上的 `@container`），不是视口，所以量的是 body 实宽而不是窗口尺寸；
 - mono 下类型徽标去饱和（`sat < 0.12`），且**必须真的取到徽标** —— 取不到算失败。
 
 另外有**五轮专项**（合成目录只落在 `_shots/`，不进 `market/catalog.json`）：
@@ -173,7 +178,7 @@ bash _tools/market-verify.sh mono
 irm https://raw.githubusercontent.com/LIPiston/open-revo-market/main/_tools/install-market.ps1 | iex
 ```
 
-脚本拉 main 分支的 `plugin-market/`，剥掉归档的包装层后复制到 `%APPDATA%\OpenRevo\plugins\plugin-market\`，并**自校验** `manifest.json` 的 `id` 与 `index.html` 的完整性（少于 20 KB 直接判失败）。已有旧版会被覆盖。
+脚本拉 main 分支的 `plugin-market/`，剥掉归档的包装层后复制到 `%APPDATA%\OpenRevo\plugins\plugin-market\`，并**自校验**：`manifest.json` 的 `id`、`index.html` / `market.css` / `market.js` 三个文件都在、`index.html` 确实引着那两个文件，且 `css + js` 合计不少于 20 KB（少于就判失败）。已有旧版会被覆盖。
 
 直连 raw.githubusercontent 打不开时：
 

@@ -34,7 +34,7 @@
 
 三个直接后果，解释了本仓库大部分看起来奇怪的规定：
 
-- **`srcDoc` 注入** ⇒ 插件 HTML 是独立文档，基准 URL 是宿主文档（`tauri://localhost`），不是插件目录。任何 `<link rel=stylesheet>` / `<script src>` / `<img src="assets/…">` 都取不到插件目录里的文件 ⇒ **产物必须单文件**（CSS / JS 全内联）。
+- **`srcDoc` 注入** ⇒ 插件 HTML 是独立文档。但实测（0.9.5）：基准 URL 被处理成**插件目录**，所以 `<link rel=stylesheet href="market.css">` / `<script src="market.js">` / `<img src="assets/…">` / 相对 `fetch()` 都能取到，返回值 HTTP 200。**多文件产物可行**，不必把所有东西内联进一个 HTML。（这条推翻了本仓库早先「srcDoc ⇒ 必须单文件」的结论；取证方法见 §实测：外部资源。）
 - **`allow-same-origin` 与 `allow-scripts` 同时给** ⇒ 沙盒形同虚设：iframe 与宿主同源，既能读 `window.parent.document`，也能拿到 `window.parent.__TAURI_INTERNALS__`。
 - **没有 `allow-downloads` / `allow-popups`** ⇒ `<a download>` 与 `window.open` 会被拦，所以下载、解压、落盘只能交给宿主。
 
@@ -54,9 +54,36 @@
 
 ⇒ `tab` 插件直接读 `window.parent.__TAURI_INTERNALS__.invoke`，或用 `window.parent.__OPENREVO_BRIDGE__.invoke`。市场两条路都试，取到哪条用哪条。
 
-### 实测：`tab` iframe 能做什么
+### 实测：外部资源（推翻「必须单文件」）
 
-在等价沙盒环境（逐字复刻 sandbox + `srcDoc` 注入 + 父窗口挂 `__TAURI_INTERNALS__`）里实测：
+在 `%APPDATA%\OpenRevo\plugins\zz-probe\` 放了一个只做这件事的 `tab` 插件：`index.html`
+用相对路径引style/css/js/img，再用 `fetch()` 逐个回读。
+
+| 引用方式 | tab 内嵌面板 | 独立视窗 | 说明 |
+|---|---|---|---|
+| `<link rel=stylesheet href="style.css">` | ✅ 生效 | ✅ 生效 | 基准 URL 是插件目录 |
+| `<script src="app.js">` | ✅ 执行 | ✅ 执行 | — |
+| `<img src="assets/dot.png">` | ✅ 渲染 | ✅ 渲染 | 子目录也行 |
+| `fetch('style.css')` / `fetch('./manifest.json')` | ✅ 200 | ✅ 200 | 相对路径按插件目录解析 |
+
+⇒ `tab` 插件的产物**可以多文件**，`market.css` / `market.js` 外链即可。唯一的约束是路径
+必须是相对插件目录的，且构建期要断言「只引用预期的那几个」。
+
+### 实测：独立视窗的几何与上下文
+
+| 项 | 结论 |
+|---|---|
+| 窗口尺寸 | 由 `manifest.window.width/height` 决定（逻辑像素） |
+| **没写 `window`** | 宿主默认 **240×320 且无标题栏 ⇒ 关不掉**，只能结束宿主进程 |
+| `decorations: true` | 有原生标题栏（最小化/最大化/关闭）。**这是「关得掉」的唯一来源** |
+| `resizable: true` | 可以拖拽缩放 |
+| `skip_taskbar: false` | 出现在任务栏 / Alt+Tab，关不掉时还能找回 |
+| 重复点「独立视窗运行」 | 宿主保持单实例（幂等），不会真的开多个窗 |
+| 宿主桥 | ✅ 可用，`get_plugin_host_capabilities` 返回同上 |
+| `localStorage` | ✅ 与 tab 内嵌共享（跨上下文缓存可用） |
+| `parent.document` 的 `data-theme` | ❌ 取不到 —— 独立视窗没有那个父文档。主题必须自带兜底 |
+
+### 实测：`tab` iframe 能做什么
 
 | 能力 | 结果 | 说明 |
 |---|---|---|

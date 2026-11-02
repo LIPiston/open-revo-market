@@ -226,8 +226,40 @@ else:
     scroll_ok = True
     paging_ok = pag.get('paging') in (None, 'no pager')
 
-# 形态专项：合成目录里 service / shell / driver 各一条时，三个筛选按钮都得出现、
-# 计数都为 1，且卡片上真的用了对应的徽标类名（否则配色规则写对了也没被引用）。
+# 自适应列数（§5 第 2 条）：把 iframe 拉到几档宽度，逐个量网格轨道数。
+# 列数由 **容器宽度** 决定（.mkt-body 上的 @container），不是视口 ——
+# 所以别拿 --window-size 硬编码，量的是 body 的实宽。
+# 断言的是**用户能看见的契约**（拖宽更多列、拖窄递减、不横溢），
+# 不去复算 CSS 的像素公式 —— 公式里还藏着内边距与滚动条槽宽，算死了改样式就误报。
+gr = j.get('gridResp') or {}
+samples = gr.get('samples') or []
+track_seq = [sp.get('tracks') for sp in samples]
+grid_ok = gr.get('grid') == 'measured' and len(samples) >= 4
+bad = []
+if samples:
+    # 最宽一档：宿主里把窗口拖到最大必须 4–5 列（用户原话「只显示两个」的反面）
+    if not 4 <= (track_seq[0] or 0) <= 5:
+        bad.append(f"最宽 {samples[0].get('bodyW')}px 只有 {track_seq[0]} 列，期望 4–5")
+    # 常规面板：约 791px 内容宽必须挤出 3 列
+    if (track_seq[1] or 0) < 3:
+        bad.append(f"{samples[1].get('bodyW')}px 宽只有 {track_seq[1]} 列，常规面板会退化成两列")
+    # 拖到最窄：必须落回单列，而不是把卡片压成一个字宽
+    if track_seq[-1] != 1:
+        bad.append(f"最窄 {samples[-1].get('bodyW')}px 有 {track_seq[-1]} 列，期望 1")
+    # 列数随宽度单调不减（窄了反而更多列 ⇒ 断点写反）
+    if track_seq != sorted(track_seq, reverse=True):
+        bad.append(f"列数不随宽度单调递减：{list(zip([s.get('bodyW') for s in samples], track_seq))}")
+for sp in samples:
+    if sp.get('overflow'):
+        bad.append(f"bodyW={sp.get('bodyW')} 横向溢出：卡片撑破了容器")
+if bad:
+    grid_ok = False
+    print("列数不符合预期：")
+    for b in bad:
+        print("   -", b)
+print(f"grid: {list(zip([s.get('bodyW') for s in samples], track_seq))} grid_ok={grid_ok}")
+
+
 if EXPECT_TYPES:
     fmap = {f.get('key'): f.get('n') for f in (j.get('filters') or [])}
     seen = set(j.get('badgeTypes') or [])
@@ -347,7 +379,11 @@ fail = (
     or not uninstall_ok
     or not scroll_ok
     or not paging_ok
-    or live.get('live') != 'clicked'
+    or not grid_ok
+    # 实时发现改为「进入即触发」：必须没有按钮，且横幅由自动请求产生。
+    # 只判「有横幅」不够 —— 按钮若被加回来也能有横幅。
+    or live.get('live') != 'auto'
+    or live.get('hasButton') is not False
     # mono 下徽标必须去饱和；cyber 下不强求（themeOk 默认 True）
     or not j.get('themeOk')
     or not types_ok
@@ -356,7 +392,7 @@ fail = (
     or not life_ok
 )
 print(f"install_ok={install_ok} uninstall_ok={uninstall_ok} "
-      f"scroll_ok={scroll_ok} paging_ok={paging_ok} types_ok={types_ok} "
+      f"scroll_ok={scroll_ok} paging_ok={paging_ok} grid_ok={grid_ok} types_ok={types_ok} "
       f"disc_ok={disc_ok} compat_ok={compat_ok} life_ok={life_ok}")
 print("RESULT:", "FAIL" if fail else "PASS")
 sys.exit(1 if fail else 0)

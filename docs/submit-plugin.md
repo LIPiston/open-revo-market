@@ -55,7 +55,7 @@ gh repo edit --add-topic openrevo-plugin
 | `permissions` | 权限声明。**宿主不读它做任何拦截**，它只是给用户看的自述 |
 | `telemetry` | 遥测声明。同为自述 |
 | `service` | 伴随服务的配置（`executable` / `args` / `elevated` / `auto_start` / `auto_stop` / `port` / `health_url` / `description`） |
-| `window` | `widget` 的窗口几何 |
+| `window` | 窗口几何：`width` / `height` / `resizable` / `decorations` / `transparent` / `always_on_top` / `skip_taskbar`。**`tab` 插件也读它** —— 不写的话「独立视窗运行」会用宿主默认的 240×320 **且没有标题栏，用户关不掉**。见下面「一定要写 `window`」 |
 | `shortcuts` / `watchers` | 快捷键与监听规则，元素需带 `id` |
 | `theme_css` / `background_css` / `image` | 皮肤、背景、图片资源 |
 
@@ -68,16 +68,37 @@ gh repo edit --add-topic openrevo-plugin
 
 一个仓库里有多个插件时，每个一级子目录放一份 `manifest.json` 即可。
 
-### 产物必须单文件
+### 一定要写 `window`
 
-宿主把插件的 HTML **直接注入 iframe**，文档的基准地址是宿主自己，不是你的插件目录。所以 `index.html` 里任何外部引用都会加载失败：
+`tab` 插件（以及 `widget`）都可以被用户「独立视窗运行」弹出成单独窗口。没写 `window` 时宿主用默认的 **240×320、无边框**，表现是：窗口又小又挤，而且**没有关闭按钮** —— 用户只能去任务栏结束宿主进程。
 
-- `<link rel="stylesheet" href="style.css">` ❌
-- `<script src="app.js"></script>` ❌
-- `<img src="assets/logo.png">` ❌
-- `@import` ❌
+```json
+"window": {
+  "width": 1120, "height": 780,
+  "resizable": true, "decorations": true,
+  "transparent": false, "always_on_top": false, "skip_taskbar": false
+}
+```
 
-样式和脚本要内联进 `index.html`。这不是建议，是宿主加载方式的直接结果（[`host-contract.md`](host-contract.md) §sandbox 与桥 有机制说明）。
+- `decorations: true` 是「关得掉」的**唯一**来源；
+- `skip_taskbar: false` 让它在 Alt+Tab 里找得到；
+- 布局要能自适应宽度，因为 `resizable: true` 之后用户会自己拖 —— 用 container query 而不是只写视口 `@media`（面板里的宽度不等于视口宽度）。
+
+### 产物可以多文件，但单文件最保险
+
+宿主把插件的 HTML 注入 iframe。**0.9.5 实测**：iframe 的基准 URL 是**你的插件目录**，所以相对引用能正常加载 ——
+
+- `<link rel="stylesheet" href="style.css">` ✅
+- `<script src="app.js"></script>` ✅
+- `<img src="assets/logo.png">` ✅（子目录也行）
+- `fetch('./manifest.json')` ✅
+
+取证方法见 [`host-contract.md`](host-contract.md) §实测：外部资源。**但**这条只在 0.9.5 上验过，更早的宿主未必如此。所以：
+
+- 只想兼容当前宿主 → 拆成 HTML / CSS / JS 三件，更好维护；
+- 想兼容尽量多的宿主 → 全部内联进 `index.html`，最保险。
+
+别用绝对路径（`/style.css`）或依赖宿主域名的 URL —— 那两种在沙盒里都取不到。
 
 ### 页面里不能用 `confirm` / `alert`
 
@@ -89,7 +110,7 @@ gh repo edit --add-topic openrevo-plugin
 
 - **第一次收录**：打完 topic 后约一小时，最长一小时多一点；
 - **之后的更新**：同样每小时跟进 `version`、`description`、`stars` 等字段；
-- **想立刻看到**：在市场的「实时发现」里直接查 GitHub，不用等爬虫 —— 但那只影响你自己看到的列表，别人还是要等下一轮。
+- **想立刻看到**：市场页签每次打开都会自动查一次 GitHub，不用等爬虫 —— 但那只影响你自己看到的列表，别人还是要等下一轮。
 
 爬虫只读仓库的默认分支。
 

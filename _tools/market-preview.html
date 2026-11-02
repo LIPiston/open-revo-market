@@ -242,29 +242,59 @@ const errors = [];
 const f = document.getElementById('f');
 
 async function run() {
-  let html;
+  // 产物已拆成多文件（index.html + market.css + market.js）。预览仍然走 srcdoc，
+  // 所以必须**在注入前把 css/js 读出来内联**：srcdoc 的基准 URL 是父页面地址
+  // （/_tools/…），`<link href="market.css">` 会被解析成 /_tools/market.css → 404，
+  // 预览就成了裸 HTML。内联后基准 URL 仍是本页，`catalogPath` 的写法约定不变。
+  let html, css, js;
   try {
-    const r = await fetch('../plugin-market/index.html?t=' + Date.now());
-    html = await r.text();
+    const [hr, cr, jr] = await Promise.all([
+      fetch('../plugin-market/index.html?t=' + Date.now()),
+      fetch('../plugin-market/market.css?t=' + Date.now()),
+      fetch('../plugin-market/market.js?t=' + Date.now()),
+    ]);
+    if (!hr.ok) throw new Error('index.html HTTP ' + hr.status);
+    if (!cr.ok) throw new Error('market.css HTTP ' + cr.status);
+    if (!jr.ok) throw new Error('market.js HTTP ' + jr.status);
+    html = await hr.text();
+    css = await cr.text();
+    js = await jr.text();
   } catch (e) {
-    diag.className = 'err'; diag.textContent = '无法读取 plugin-market/index.html：' + e.message;
+    diag.className = 'err'; diag.textContent = '无法读取 plugin-market 产物：' + e.message;
     return;
   }
-  // ?catalog=local：把产物里的两个在线目录 URL 直接改写成仓库内的相对路径。
-  // 否则验收结果取决于远端分支状态 —— 本地改了目录但还没 push 时，测到的仍是旧目录，
-  // 「目录整个拉丢了」与「目录真的变了」也分不开。
-  // 改写字面量而不是劫持 window.fetch：沙盒里 fetch 在脚本执行前就被市场模块捕获，
-  // 事后替换常常不生效（实测踩过）。
+
+  // ?catalog=local：把 market.js 里那三个在线目录 URL 改写成仓库内的相对路径。
+  // 拆分后这些字面量在 **js** 里，不再在 HTML 里 —— 改错文件的话这条开关会静默失效。
   if (params.get('catalog') === 'local') {
     // catalogPath 可覆盖目录文件，用于验收「条目多到要翻页」的场景
     const catPath = params.get('catalogPath') || '../market/catalog.json';
-    html = html
+    js = js
       .replaceAll('https://raw.githubusercontent.com/LIPiston/open-revo-market/main/market/catalog.json',
                   catPath)
       .replaceAll('https://gh-proxy.com/https://raw.githubusercontent.com/LIPiston/open-revo-market/main/market/catalog.json',
                   catPath)
       .replaceAll('https://cdn.jsdelivr.net/gh/LIPiston/open-revo-market@main/market/catalog.json',
                   catPath);
+  }
+
+  // 内联：link → <style>，script src → 内联 <script>。
+  // 注意：本段源码里**不能出现** script 的闭合标签字面量（连注释里也不行），
+  // 否则浏览器解析器在这一行就把外层 script 截断，整页脚本变成语法错误
+  // （实测踩过：diag 永远停在 booting…）。所以闭合标签一律用 '<'+'/script' 拼。
+  const CLOSE = '<' + '/script';
+  if (new RegExp(CLOSE, 'i').test(js)) {
+    diag.className = 'err'; diag.textContent = 'market.js 含 ' + CLOSE + ' 字面量，无法内联';
+    return;
+  }
+  html = html
+    .replace(/<link[^>]*href=["']market\.css["'][^>]*>/i, '<style>\n' + css + '\n</style>')
+    .replace(new RegExp('<script[^>]*src=["\']market\\.js["\'][^>]*>\\s*' + CLOSE + '>', 'i'),
+             '<script>\n' + js + '\n' + CLOSE + '>');
+
+  if (/(href|src)=["']market\.(css|js)["']/i.test(html)) {
+    diag.className = 'err'; diag.textContent = '内联失败：index.html 里仍有 market.css/js 引用';
+    return;
   }
   f.srcdoc = html;
 
@@ -283,7 +313,9 @@ function snapshot() {
   if (!w || !w.document) return { ready: false };
   const d = w.document;
   const app = d.getElementById('app');
-  const cards = d.querySelectorAll('.mkt-card');
+  // 卡片分两类：目录条目 与 实时发现条目（data-live）。实时发现现在自动触发，
+  // 它会在目录之外**再插若干张卡**——混在一起数，目录完整性就再也断言不了。
+  const cards = d.querySelectorAll('.mkt-card:not([data-live])');
   const toast = d.getElementById('toast');
   return {
     ready: !!(app && app.children.length),
@@ -295,6 +327,7 @@ function snapshot() {
     badgeBg: (function(){ const b=d.querySelector('.mkt-badge[class*="type-"]'); return b? getComputedStyle(b).backgroundColor : null; })(),
     appChildren: app ? app.children.length : 0,
     cards: cards.length,
+    liveCards: d.querySelectorAll('.mkt-card[data-live]').length,
     sources: d.querySelectorAll('.mkt-src').length,
     badges: d.querySelectorAll('.mkt-badge').length,
     installedBadges: d.querySelectorAll('.mkt-badge.ok').length,
@@ -329,6 +362,20 @@ function snapshot() {
         can: b.scrollHeight > b.clientHeight,
         h: b.clientHeight, sh: b.scrollHeight,
         overflow: getComputedStyle(b).overflowY,
+      };
+    })(),
+    // 网格实测列数：解析 grid-template-columns 的轨道条数。
+    // 列数是「一屏看得见几个插件」的直接判据，比截图目测可靠。
+    grid: (function () {
+      const g = d.querySelector('.mkt-grid');
+      if (!g) return null;
+      const tpl = getComputedStyle(g).gridTemplateColumns;
+      const tracks = tpl && tpl !== 'none' ? tpl.trim().split(/\s+/).length : 0;
+      const body = d.querySelector('.mkt-body');
+      return {
+        tracks,
+        bodyW: body ? Math.round(body.clientWidth) : null,
+        cardW: Math.round(g.firstElementChild ? g.firstElementChild.getBoundingClientRect().width : 0),
       };
     })(),
     // 翻页：页数、当前页、页码按钮、总量与区间
@@ -595,21 +642,75 @@ if (params.get('modal') === '1') {
   }, t);
 }
 
-/* 再演练：点一次「实时发现」（打 api.github.com）。
- * 无网络 / 被限速 / 有结果 三种结局都算通过 —— 市场必须能优雅降级，
- * 但不能出现未捕获异常。失败时应在页面上给出可见的说明条。 */
+/* 实时发现现在是**自动**的：切到这个 tab（= 本页加载）就查一次，UI 上没有按钮。
+ * 这里只观察结果，不点任何东西。
+ *
+ * 三种结局都算通过：查到了 / 没有新的 / 查失败。市场必须能优雅降级，
+ * 但不能出现未捕获异常；失败时页面上要有可见说明条。
+ * 判据是「没有按钮」+「要么已出结果横幅、要么在 loading」——
+ * 不能把「横幅还没出来」当成通过，否则请求根本没发也会 PASS。 */
 async function exerciseLive() {
   const w = f.contentWindow;
   const d = w.document;
   const btn = d.querySelector('[data-act="live"]');
-  if (!btn) return { live: 'no live button' };
-  btn.click();
-  await new Promise((r) => setTimeout(r, 3500));
-  const note = d.querySelector('.mkt-note');
+  // 自动触发是异步的（目录请求之后），等到横幅出现或超时
+  let note = null;
+  for (let i = 0; i < 20; i += 1) {
+    note = d.querySelector('.mkt-note');
+    if (note && note.textContent.trim()) break;
+    await new Promise((r) => setTimeout(r, 400));
+  }
+  const noteText = note ? note.textContent.replace(/\s+/g, ' ').trim() : null;
   return {
-    live: 'clicked',
-    noteText: note ? note.textContent.replace(/\s+/g, ' ').trim().slice(0, 110) : null,
+    live: btn ? 'button-still-present' : (noteText ? 'auto' : 'no-banner'),
+    hasButton: !!btn,
+    noteText: noteText ? noteText.slice(0, 140) : null,
   };
+}
+
+/* 自适应列数演练（?grid=1）：把 iframe 拉到几档宽度，分别量网格轨道数。
+ *
+ * 为什么量轨道数而不是截图目测：列数是「一屏看得见几个插件」的唯一判据，
+ * 而它由 **容器宽度** 决定（.mkt-body 上的 @container），不是视口 —— 用窗口尺寸
+ * 缩放只能间接影响，量不出来就不知道容器查询到底有没有生效。
+ *
+ * 每档都同时记 bodyW 与 tracks，验收脚本按 bodyW 落区间断言，不硬编码像素。 */
+const GRID_WIDTHS = [1240, 1000, 840, 600, 460];
+
+async function exerciseGrid() {
+  const w = f.contentWindow;
+  const d = w.document;
+  const g = d.querySelector('.mkt-grid');
+  const body = d.querySelector('.mkt-body');
+  if (!g || !body) return { grid: 'no grid' };
+
+  const prevW = f.style.width;
+  const prevH = f.style.height;
+  f.style.height = '100%';
+  const samples = [];
+  // 不用 requestAnimationFrame 等重排：headless 的 --virtual-time-budget 下
+  // rAF 不一定被调度，await 会永远挂着，整个演练（连 diag）都卡死。
+  // 读 computedStyle/getBoundingClientRect 本身就会强制同步布局，够了。
+  const settle = () => new Promise((r) => setTimeout(r, 80));
+  for (const px of GRID_WIDTHS) {
+    f.style.width = px + 'px';
+    void d.body.offsetHeight; // 强制重排
+    await settle();
+    const tpl = getComputedStyle(g).gridTemplateColumns;
+    const tracks = tpl && tpl !== 'none' ? tpl.trim().split(/\s+/).length : 0;
+    samples.push({
+      iframeW: px,
+      bodyW: Math.round(body.clientWidth),
+      tracks,
+      // 卡片不许溢出容器（横向滚动的直接表现）
+      overflow: body.scrollWidth > body.clientWidth + 1,
+    });
+  }
+  f.style.width = prevW || '100%';
+  f.style.height = prevH || '100%';
+  await settle();
+
+  return { grid: 'measured', samples, widths: GRID_WIDTHS };
 }
 
 setTimeout(async () => {
@@ -617,6 +718,10 @@ setTimeout(async () => {
   if (params.get('modal') === '1') return;
 
   const s = snapshot();
+  // 列数演练会改 iframe 宽度，必须在其它演练之前跑完并复原，
+  // 否则后面几步（点安装、翻页）会在一个被拉宽/拉窄的面板里发生。
+  let gr = null;
+  try { gr = await exerciseGrid(); } catch (e) { gr = { grid: 'threw: ' + e.message }; }
   let install = null;
   try { install = await exerciseInstall(); } catch (e) { install = { install: 'threw: ' + e.message }; }
   let uninst = null;
@@ -659,13 +764,13 @@ setTimeout(async () => {
   );
 
   const ok = s.ready && s.cards > 0 && errors.length === 0
-    && installOk && themeOk && live && live.live === 'clicked';
+    && installOk && themeOk && live && live.live === 'auto' && live.hasButton === false;
 
   diag.className = ok ? 'ok' : 'err';
   diag.textContent = JSON.stringify({
     host: HOST_MODE, ready: s.ready, cards: s.cards, errors, install, uninstall: uninst, live, paging,
     lifecycle: life, service: svc,
-    scroll: s.scroll, pager: s.pager,
+    scroll: s.scroll, pager: s.pager, grid: s.grid, gridResp: gr,
     calls: [...new Set(CALLS.map(c => c[0]))], sources: s.sources, badges: s.badges,
     installedBadges: s.installedBadges, filterLabels: s.filterLabels,
     filters: s.filters, badgeTypes: s.badgeTypes,

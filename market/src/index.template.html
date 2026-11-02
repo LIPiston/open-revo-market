@@ -5,24 +5,21 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>插件市场</title>
 <!--
-  OpenRevo 插件市场 · 单文件产物
-  由 `python build_market.py` 从 market/src/{market.css,market.js} 生成，请勿直接手改本文件。
+  OpenRevo 插件市场 · 入口骨架
+  由 `python build_market.py` 生成到 plugin-market/index.html，请勿直接手改产物。
 
-  为什么必须单文件：宿主把插件 index.html 作为 srcdoc 注入 iframe，其基准 URL 是宿主文档
-  （tauri://localhost），相对路径资源取不到插件目录。把所有样式与脚本内联进来，
-  既零 404，也不依赖宿主的资产内联器。
+  资源为什么能外链：宿主把插件 index.html 作为 srcdoc 注入 iframe，但基准 URL
+  被处理成插件目录，`<link rel=stylesheet>` / `<script src>` / 相对图片 / fetch
+  都能取到（宿主 0.9.5 实测，取证方法见 docs/host-contract.md）。
+  index.html 只许引用下面这两个文件 —— build_market.py 会在构建期断言。
 -->
-<style>
-/*__MARKET_CSS__*/
-</style>
+<link rel="stylesheet" href="market.css" />
 </head>
 <body>
 <div id="app"></div>
 <!-- toast 必须挂在 #app 之外：render() 整块重写 #app.innerHTML，
      放在里面会被重建掉 —— 调用方 toast() 之后紧接 render() 时消息当场消失。 -->
 <div id="toast" class="mkt-toast" hidden></div>
-<script>
-/*__MARKET_JS__*/
-</script>
+<script src="market.js" defer></script>
 </body>
 </html>

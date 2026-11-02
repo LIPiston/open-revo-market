@@ -5,6 +5,8 @@
  * 宿主约束（详见 docs/host-contract.md）：
  *  1. `tab` 插件跑在 `srcDoc` iframe（sandbox=allow-scripts allow-forms allow-same-origin），
  *     与宿主**同源** → 可访问 window.parent.__TAURI_INTERNALS__.invoke 与父文档 DOM。
+ *     「独立视窗运行」弹出的窗口里**同样是 iframe**（`about:srcdoc#/widget/<id>`），
+ *     宿主桥一样可用；但那边父文档没有 data-theme，主题要降级（见 syncTheme）。
  *  2. 该 iframe **没有** allow-downloads / allow-popups → 下载与 window.open 全部被拦，
  *     所以**下载、解压、落盘全部交给宿主**，市场只发一条 IPC。
  *  3. 宿主能力**按运行时探测**，不按版本号猜：
@@ -13,6 +15,8 @@
  *                                         can_read_manifest, can_manage_service }
  *     该命令在旧宿主上不存在 → 自动降级为「复制命令」的交接模式。
  *  4. iframe 是独立文档，宿主 :root 令牌**不继承** → 主题靠读父文档 data-theme 手动镜像。
+ *  5. `market.css` / `market.js` 走**外链**：宿主把 srcDoc 的基准 URL 处理成插件目录，
+ *     相对资源实测可取（0.9.5）。所以本文件不再被内联进 index.html。
  *
  * 已核实的 IPC 签名（参数名逐字取自 exe 命令注册表，勿按文档臆改）：
  *   install_plugin_from_url { id, url, subpath?, sha256? }  // id 必需，决定安装目录名
@@ -44,6 +48,12 @@ const CONFIG = {
   // 无第三方 API key 时 GitHub 搜索限额 10 次/分钟，做防抖与结果缓存。
   searchDebounceMs: 450,
   catalogTtlMs: 10 * 60 * 1000,
+  // 实时发现的缓存 TTL。切到这个 tab 会自动查一次，但没有理由每次都打 GitHub ——
+  // 未认证限额约 10 次/分钟，来回切几次就 403。5 分钟内复用上次结果。
+  liveTtlMs: 5 * 60 * 1000,
+  // 跨上下文的软锁：tab 内嵌与独立视窗各自 init()，共享 localStorage，
+  // 同时启动时两边都可能各发一次请求。30 秒内看到别人在查就跳过。
+  liveLockMs: 30 * 1000,
   // 单次请求超时。没有它，被墙的直连会挂到浏览器默认超时，界面看起来就是「卡住」。
   requestTimeoutMs: 8000,
 };
@@ -157,6 +167,7 @@ const state = {
   live: null,            // 实时 topic 搜索结果
   liveLoading: false,
   liveError: null,
+  liveAt: null,          // 上次**成功**发现的时间戳（ms）；横幅据此说「上次发现于…」
 };
 
 /* ------------------------------------------------------------------- utils */
@@ -292,22 +303,34 @@ async function probeCapabilities() {
 
 /* --------------------------------------------------------------- theme sync */
 /** iframe 是独立文档，宿主令牌不继承。读父文档的 data-theme 镜像过来，
- *  这样在 cyber / mono / 未来 light 皮肤下市场观感都跟着走。 */
-function syncTheme() {
+ *  这样在 cyber / mono / 未来 light 皮肤下市场观感都跟着走。
+ *
+ *  **独立视窗是个例外**：实测弹出窗里父文档没有 data-theme（读到 null），
+ *  所以「读不到」不能当成读到了 cyber —— 两者分开处理，读不到就按默认皮肤画，
+ *  免得浅色主题下发白。 */
+function readParentTheme() {
   try {
     const de = window.parent && window.parent.document && window.parent.document.documentElement;
-    const theme = (de && de.getAttribute('data-theme')) || 'cyber';
-    document.documentElement.setAttribute('data-theme', theme);
+    const t = de && de.getAttribute('data-theme');
+    return t && t.trim() ? t : null;
   } catch (_) {
-    document.documentElement.setAttribute('data-theme', 'cyber');
+    return null;
   }
 }
+
+function syncTheme() {
+  const theme = readParentTheme();
+  document.documentElement.setAttribute('data-theme', theme || 'cyber');
+}
+
 function watchTheme() {
   syncTheme();
+  // 独立视窗里没有父主题可观察：读不到就不装 observer，反复试只是噪音。
+  if (!readParentTheme()) return;
   try {
     const de = window.parent.document.documentElement;
     new MutationObserver(syncTheme).observe(de, { attributes: true, attributeFilter: ['data-theme'] });
-  } catch (_) { /* 跨源或不可达时忽略 */ }
+  } catch (_) { /* 跨源时忽略 */ }
 }
 
 /* --------------------------------------------------------- catalog loading */
@@ -459,12 +482,65 @@ async function fetchCatalog() {
 }
 
 /* ------------------------------------------------------------- live search */
+function liveCacheKey() { return 'openrevo-market-live-v1'; }
+function liveLockKey() { return 'openrevo-market-live-lock-v1'; }
+
+/** 读上次成功的实时发现结果。形状不对就当没有 —— 不猜、不修补。 */
+function readLiveCache() {
+  try {
+    const raw = localStorage.getItem(liveCacheKey());
+    if (!raw) return null;
+    const o = JSON.parse(raw);
+    if (!o || !Array.isArray(o.items) || typeof o.at !== 'number') return null;
+    return o;
+  } catch (_) { return null; }
+}
+
+function writeLiveCache(items, at) {
+  try {
+    localStorage.setItem(liveCacheKey(), JSON.stringify({ at, items }));
+  } catch (_) { /* 配额满或隐私模式，忽略 */ }
+}
+
+/** 跨上下文软锁：30 秒内别的上下文刚发过请求，就别再发一次。
+ *  tab 内嵌与独立视窗共享 localStorage（宿主实测），所以这把锁两边都看得见。 */
+function liveLockBusy() {
+  try {
+    const t = Number(localStorage.getItem(liveLockKey()) || 0);
+    return t > 0 && Date.now() - t < CONFIG.liveLockMs;
+  } catch (_) { return false; }
+}
+
+function liveLockTake() {
+  try { localStorage.setItem(liveLockKey(), String(Date.now())); } catch (_) { /* 忽略 */ }
+}
+
+function liveLockRelease() {
+  try { localStorage.removeItem(liveLockKey()); } catch (_) { /* 忽略 */ }
+}
+
 /** 直接查 GitHub topic —— 作者打上 topic 后不用等爬虫，市场就能看到。
- *  未认证限额较低，所以按需触发、结果缓存，失败不影响主流程。 */
-async function searchTopicLive() {
+ *  未认证限额较低，所以结果缓存 + 软锁，失败不影响主流程。
+ *  `force` 为真时忽略缓存（用户点了【刷新】）。 */
+async function searchTopicLive(force) {
   if (state.liveLoading) return;
+
+  if (!force) {
+    const cached = readLiveCache();
+    if (cached && Date.now() - cached.at < CONFIG.liveTtlMs) {
+      state.live = cached.items;
+      state.liveAt = cached.at;
+      state.liveError = null;
+      render();
+      return;
+    }
+  }
+
+  if (!force && liveLockBusy()) return;
+
   state.liveLoading = true;
   state.liveError = null;
+  liveLockTake();
   render();
   try {
     const q = encodeURIComponent(`topic:${CONFIG.topic}`);
@@ -484,7 +560,7 @@ async function searchTopicLive() {
     }
     if (!data) throw lastErr || new Error('GitHub 搜索失败');
     const known = new Set((state.catalog ? state.catalog.plugins : []).map((p) => p.repo));
-    state.live = (data.items || [])
+    const items = (data.items || [])
       .filter((r) => !known.has(r.full_name))
       .map((r) => ({
         id: (r.name || '').toLowerCase(),
@@ -505,12 +581,37 @@ async function searchTopicLive() {
         topics: r.topics || [],
         live: true,
       }));
+    state.live = items;
+    state.liveAt = Date.now();
+    // 只缓存**成功**结果。失败不缓存 —— 否则一次限流会让用户被 5 分钟的空结果锁住。
+    writeLiveCache(items, state.liveAt);
   } catch (e) {
     state.liveError = String((e && e.message) || e).slice(0, 140);
   } finally {
+    liveLockRelease();
     state.liveLoading = false;
     render();
   }
+}
+
+/** 切到市场 tab 时自动跑一次实时发现。
+ *
+ *  宿主每次切回该 tab 会**重建 iframe**（实测：页面加载时间戳变化），
+ *  所以「本页加载」就等于「用户切到了这个 tab」，不需要 visibility API。
+ *
+ *  为什么不直接调用 searchTopicLive()：主机与独立视窗共享 localStorage，
+ *  缓存与软锁都在那一层；TTL 内直接复用上次结果，不再打 GitHub。
+ *  失败**不**自动重试 —— 用户点【刷新】才是显式重试入口。 */
+function maybeAutoLive() {
+  const cached = readLiveCache();
+  if (cached && Date.now() - cached.at < CONFIG.liveTtlMs) {
+    state.live = cached.items;
+    state.liveAt = cached.at;
+    state.liveError = null;
+    render();
+    return;
+  }
+  searchTopicLive(false);
 }
 
 /* ----------------------------------------------------------------- install */
@@ -1127,7 +1228,7 @@ function card(entry) {
   const mainCls = isBusy ? '' : (isInst && !upd ? '' : 'primary');
 
   return `
-    <div class="mkt-card${isInst ? ' installed' : ''}${isBusy ? ' busy' : ''}" data-id="${esc(entry.id)}">
+    <div class="mkt-card${isInst ? ' installed' : ''}${isBusy ? ' busy' : ''}" data-id="${esc(entry.id)}"${entry.live ? ' data-live="1"' : ''}>
       <div class="mkt-card-head">
         <div class="mkt-avatar" style="--h:${hue}">${icon}</div>
         <div class="mkt-card-titles">
@@ -1180,9 +1281,8 @@ function toolbar() {
           <input id="q" type="search" placeholder="搜索插件、作者、仓库或描述…" value="${esc(state.query)}" spellcheck="false" />
         </div>
         <div class="mkt-actions">
-          <button class="mkt-btn icon" data-act="refresh" title="重新获取目录" aria-label="刷新">${I.refresh}</button>
+          <button class="mkt-btn icon" data-act="refresh" title="重新获取目录，并强制重查一次实时发现" aria-label="刷新">${I.refresh}</button>
           <button class="mkt-btn labeled" data-act="open-dir" title="在资源管理器中打开插件目录">${I.folder}<span class="lb">插件目录</span></button>
-          <button class="mkt-btn labeled" data-act="live" title="直接查询 GitHub topic，发现尚未被收录的新插件">${I.tag}<span class="lb">实时发现</span></button>
         </div>
       </div>
       <div class="mkt-filterbar">
@@ -1246,20 +1346,24 @@ function emptyBlock() {
     也可以点「实时发现」立刻查看。</div></div>`;
 }
 
+/** 实时发现的横幅。切到本 tab 会自动跑一次，所以文案要说清「什么时候查的」，
+ *  并且**没有**手动按钮 —— 想强制重查就点工具栏的【刷新】。 */
 function liveBanner() {
   if (state.liveLoading) {
-    return `<div class="mkt-note plain">${I.refresh}<span>正在查询 GitHub topic <code>${esc(CONFIG.topic)}</code>…</span></div>`;
+    return `<div class="mkt-note plain">${I.refresh}<span class="mkt-spin">${I.refresh}</span><span>正在查询 GitHub topic <code>${esc(CONFIG.topic)}</code>…</span></div>`;
   }
   if (state.liveError) {
     return `<div class="mkt-note">${I.alert}<span>实时发现失败：${esc(state.liveError)}<br/>
-      未认证的 GitHub 搜索接口限速较紧（约 10 次/分钟），稍后再试。</span></div>`;
+      未认证的 GitHub 搜索接口限速较紧（约 10 次/分钟）。点上方【刷新】可立即重试。</span></div>`;
   }
+  const at = state.liveAt ? relTime(new Date(state.liveAt).toISOString()) : null;
+  const when = at ? `<span class="live-at">· 上次发现 ${esc(at)}</span>` : '';
   if (state.live && state.live.length) {
     return `<div class="mkt-note plain">${I.info}<span>实时发现到 <b>${state.live.length}</b> 个尚未收录的仓库。
-      它们没有经过任何检查，也未读取 manifest，安装前请自行阅读源码。</span></div>`;
+      它们没有经过任何检查，也未读取 manifest，安装前请自行阅读源码。${when}</span></div>`;
   }
   if (state.live && state.live.length === 0) {
-    return `<div class="mkt-note plain">${I.info}<span>GitHub 上暂时没有新的 <code>${esc(CONFIG.topic)}</code> 仓库。</span></div>`;
+    return `<div class="mkt-note plain">${I.info}<span>GitHub 上暂时没有新的 <code>${esc(CONFIG.topic)}</code> 仓库。${when}</span></div>`;
   }
   return '';
 }
@@ -1359,7 +1463,8 @@ function bind() {
   document.querySelectorAll('[data-filter]').forEach((el) => {
     el.addEventListener('click', () => {
       state.typeFilter = el.getAttribute('data-filter');
-      state.live = null;
+      // 不再清空 state.live：实时发现在没有按钮之后，清掉就再也回不来了。
+      // 它是「相对目录新增了什么」的指示器，换筛选不该把它弄丢。
       state.page = 1;   // 换了筛选，页码没有意义了
       render();
     });
@@ -1384,7 +1489,6 @@ function bind() {
       const id = el.getAttribute('data-id');
       if (act === 'refresh') { refreshAll(); return; }
       if (act === 'open-dir') { openPluginsDir(); return; }
-      if (act === 'live') { searchTopicLive(); return; }
 
       const entry = id ? currentList().find((p) => p.id === id) : null;
       if (!entry) return;
@@ -1450,13 +1554,17 @@ function openUninstallModal(entry) {
   document.addEventListener('keydown', onKey);
 }
 
-/** 手动刷新：目录 + 已安装 + 能力位一起重取。 */
+/** 手动刷新：目录 + 已安装 + 能力位一起重取。
+ *  实时发现也**强制**重查一次 —— 按钮移除后，这是用户唯一的手动重试入口。 */
 async function refreshAll() {
   await probeCapabilities();
   await refreshInstalled();
   render();
   await fetchCatalog();
   readInstalledVersions();
+  state.live = null;
+  state.liveAt = null;
+  searchTopicLive(true);
 }
 
 async function openPluginsDir() {
@@ -1674,6 +1782,9 @@ async function init() {
   render();
 
   fetchCatalog().then(() => readInstalledVersions());
+  // 切到本 tab 就等于一次页面加载（宿主会重建 iframe），所以在目录之后自动跑一次。
+  // 放在 fetchCatalog 之后，避免与目录请求抢同一个网络窗口。
+  maybeAutoLive();
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

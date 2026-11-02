@@ -10,6 +10,14 @@ on:
   schedule:
     - cron: '17 * * * *'      # 每小时第 17 分钟，错开整点高峰
   workflow_dispatch:           # 也允许手动触发
+  push:                        # 抓取/校验逻辑或人工判断变动时立即刷新一轮
+    paths:
+      - 'market/overrides.json'    # 人工判断变了，目录必须重算
+      - 'market/crawl_topic.py'    # 抓取逻辑变了
+      - 'market/validate_catalog.py'
+      - 'market/overrides.py'
+      - '.github/workflows/refresh-catalog.yml'
+    # 注意：刻意排除 market/catalog.json，否则本工作流自己的提交会再次触发，形成回环
 
 permissions:
   contents: write              # 需要写回 catalog.json

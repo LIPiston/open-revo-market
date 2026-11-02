@@ -1,8 +1,8 @@
 /* ============================================================================
  * OpenRevo 插件市场 · 样式
- * 由 build_market.py 内联进 plugin-market/index.html —— 必须保持单文件无外部引用。
+ * 由 build_market.py 引用到 plugin-market/index.html（外链，不再内联）。
  *
- * 两条硬约束，改版时必须守住：
+ * 三条硬约束，改版时必须守住：
  *
  *  1. **自带不透明底色**。宿主把插件作为 srcDoc 注入 iframe，iframe 的
  *     `background: transparent` 会露出宿主面板的底色；真实宿主里那块是浅色，
@@ -11,6 +11,10 @@
  *
  *  2. **宿主令牌不继承**。iframe 是独立文档，:root 变量不会跨文档继承，
  *     因此这里自带一份完整令牌面；`html[data-theme]` 只用来跟随宿主主题。
+ *
+ *  3. **列数跟着内容区，不跟视口**。宿主面板宽度与视口无关（150% DPI 下
+ *     1444 physical 的主窗只给插件约 791 CSS px；独立视窗又能拉到 1000+），
+ *     所以用 container query 而不是视口 @media 断点。
  * ========================================================================== */
 
 :root {
@@ -388,6 +392,8 @@ html[data-theme="mono"] .mkt-src.active .n { background: var(--surface-pill-hove
 }
 
 /* ---------------------------------------------------------------- 内容区 */
+/* 内容区是容器：列数按它的内联尺寸算，与视口无关。
+   `.mkt-body` 的 padding 与滚动条会吃掉宽度，所以容器就是这个盒子的内容宽度。 */
 .mkt-body {
   flex: 1 1 0%;
   min-height: 0;
@@ -395,6 +401,8 @@ html[data-theme="mono"] .mkt-src.active .n { background: var(--surface-pill-hove
   overflow-x: hidden;
   padding: 14px 16px 4px;
   scrollbar-gutter: stable;
+  container-type: inline-size;
+  container-name: mktbody;
 }
 .mkt-body::-webkit-scrollbar { width: 8px; }
 .mkt-body::-webkit-scrollbar-track { background: transparent; }
@@ -428,11 +436,18 @@ html[data-theme="light"] .mkt-body::-webkit-scrollbar-thumb { background: rgba(1
 .mkt-section-title::after { content: ""; flex: 1; height: 1px; background: var(--border-subtle); }
 .mkt-section-title + .mkt-grid { margin-bottom: 14px; }
 
+/* 网格列数由容器宽度决定（见文件头第 3 条）：
+     ≤560  →  1 列（独立视窗被拖窄）
+     ≥  0  →  按 --mkt-card-min 自动填充，791px 下 3 列、1000px 下 4 列、1280px 下 5 列
+   `min(100%, …)` 保证容器再窄也不会出现「一列都放不下」的横向溢出。 */
 .mkt-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(296px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--mkt-card-min, 232px)), 1fr));
   gap: 10px;
 }
+
+@container mktbody (min-width: 1160px) { .mkt-grid { --mkt-card-min: 250px; } }
+@container mktbody (max-width: 560px)  { .mkt-grid { --mkt-card-min: 100%; } }
 
 /* ------------------------------------------------------------------- 卡片 */
 .mkt-card {
@@ -1110,11 +1125,12 @@ html[data-theme="mono"] .mkt-pager .pg.active {
 html[data-theme="mono"] .mkt-toast.err { color: var(--text-primary); border-color: var(--border-highlight); }
 
 /* ------------------------------------------------------------- 窄屏收敛 */
-/* 宿主面板常被拖到 600–900px 宽：按钮只留图标，卡片单列，页脚不挤压正文。 */
+/* 视口断点只用来收按钮文字与内边距 —— **列数不在这里定**，列数看 .mkt-body
+   的容器宽度（见 .mkt-grid 上的 @container）。曾经这里写死 `grid-template-columns: 1fr`，
+   导致 791px 的常规面板被压成单列；那正是「一屏只看得见两个」的另一半原因。 */
 @media (max-width: 860px) {
   .mkt-btn.labeled { width: 34px; padding: 0; }
   .mkt-btn.labeled .lb { display: none; }
-  .mkt-grid { grid-template-columns: 1fr; }
   .mkt-meta .opt { display: none; }
 }
 @media (max-width: 640px) {
@@ -1123,4 +1139,13 @@ html[data-theme="mono"] .mkt-toast.err { color: var(--text-primary); border-colo
   .mkt-footer { padding: 8px 12px 10px; }
   .mkt-pager { padding: 7px 12px; }
   .mkt-pager .pg-info { display: none; }
+}
+
+/* 卡片在窄列下的自理：徽章与卡底按钮允许折行，不叠字、不溢出 */
+.mkt-card-foot { flex-wrap: wrap; row-gap: 6px; }
+.mkt-lifecycle-svc { flex-wrap: wrap; }
+/* 独立视窗被拖到很窄时，服务状态那行不再强撑宽度 */
+@container mktbody (max-width: 420px) {
+  .mkt-lifecycle-svc > span[data-svc-status] { max-width: none; }
+  .mkt-card-desc { min-height: 0; }
 }

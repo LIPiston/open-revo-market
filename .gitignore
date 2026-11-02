@@ -1,6 +1,7 @@
 # 生成物：随时可由验收脚本重建，不入库
 __pycache__/
 *.pyc
+.pytest_cache/
 
 # 验收 / 出图的输出目录（market-verify.sh 与 market-shots.sh 自动创建）
 _shots/

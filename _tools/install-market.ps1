@@ -81,7 +81,7 @@ if ($Root) {
 }
 
 if ($DryRun) {
-    Write-Output '[DryRun] 将下载/解压并复制到目标目录，然后校验 manifest.json 与 index.html。'
+    Write-Output '[DryRun] 将下载/解压并复制到目标目录，然后校验 manifest.json 与 index.html + market.css + market.js。'
     Write-Output '[DryRun] 未做任何改动。'
     exit 0
 }
@@ -130,8 +130,12 @@ try {
     if (-not (Test-Path -LiteralPath (Join-Path $Source 'manifest.json'))) {
         throw ("来源里没有 manifest.json：" + $Source)
     }
-    if (-not (Test-Path -LiteralPath (Join-Path $Source 'index.html'))) {
-        throw ("来源里没有 index.html（产物应为单文件）：" + $Source)
+    # 产物是多文件的：index.html 只外链 market.css / market.js（宿主 0.9.5 实测能取到，
+    # 见 docs/host-contract.md）。缺任何一个都会白屏，所以逐个点名，而不是只查 index.html。
+    foreach ($f in @('index.html', 'market.css', 'market.js')) {
+        if (-not (Test-Path -LiteralPath (Join-Path $Source $f))) {
+            throw ("来源里没有 " + $f + "（产物应为 index.html + market.css + market.js 三件套）：" + $Source)
+        }
     }
 
     # ---- 4. 落盘 -----------------------------------------------------------
@@ -147,15 +151,26 @@ try {
     if ($Manifest.id -ne $PluginId) {
         throw ("manifest.json 的 id 不是 " + $PluginId + "，实际为：" + $Manifest.id)
     }
-    $Html = Join-Path $Dest 'index.html'
-    $Size = (Get-Item -LiteralPath $Html).Length
+    # 完整性用「css + js 的字节数」判：拆分后 index.html 只剩几百字节骨架，
+    # 再拿 20000 字节卡它会把每一份**完好**的产物都判成残缺。
+    $Size = 0
+    foreach ($f in @('market.css', 'market.js')) {
+        $Size += (Get-Item -LiteralPath (Join-Path $Dest $f)).Length
+    }
     if ($Size -lt 20000) {
-        throw ("index.html 只有 " + $Size + " 字节，明显不是完整产物。")
+        throw ("market.css + market.js 合计只有 " + $Size + " 字节，明显不是完整产物。")
+    }
+    # index.html 必须真的引着这两个文件 —— 有文件但没引用＝页面白屏。
+    $HtmlText = Get-Content -LiteralPath (Join-Path $Dest 'index.html') -Raw -Encoding UTF8
+    foreach ($f in @('market.css', 'market.js')) {
+        if ($HtmlText -notmatch [regex]::Escape($f)) {
+            throw ("index.html 没有引用 " + $f + "，页面会白屏。")
+        }
     }
 
     Write-Output ''
     Write-Output ('已安装 : ' + $Dest)
-    Write-Output ('版本   : ' + $Manifest.version + ' · ' + $Manifest.plugin_type + ' · index.html ' + $Size + ' 字节')
+    Write-Output ('版本   : ' + $Manifest.version + ' · ' + $Manifest.plugin_type + ' · css+js ' + $Size + ' 字节')
     Write-Output '下一步 : OpenRevo → 侧边栏【插件】页 → 右上角【刷新】→ 顶栏出现「插件市场」页签。'
 }
 finally {

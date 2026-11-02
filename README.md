@@ -69,7 +69,7 @@ open-revo-market\
 │   ├── catalog.json            # 派生目录（CI 每小时重写，别手改）
 │   ├── overrides.json          # 人工覆写层（审核 / 覆写 / 下架）
 │   └── *.py                    # 爬虫 / 覆写层 / 目录校验 / 测试
-├── build_market.py             # 构建器（单文件产物 + 自检）
+├── build_market.py             # 构建器（多文件产物 + 自检）
 ├── plugin-market\              # 市场构建产物（入库，可直接装）
 ├── _tools\                     # 安装 / 验收 / 预览 / 出图
 └── docs\                       # 文档（见上面的三扇门）
