@@ -11,8 +11,8 @@
 #      一个 15×15 的陶窗口（Tao Thread Event Target），不是真窗口。
 #
 # 用法：
-#   powershell -NoProfile -ExecutionPolicy Bypass -File _tools\host-shot.ps1
-#   powershell ... -File _tools\host-shot.ps1 -Out _shots\after.png
+#   powershell -NoProfile -ExecutionPolicy Bypass -File tools\host-shot.ps1
+#   powershell ... -File tools\host-shot.ps1 -Out _shots\after.png
 param(
   [string]$Out = "D:\LIPis\Documents\code\openrevo-market\_shots\host-live.png",
   [switch]$Full    # 整屏截图（窗口位置可疑时用这个，不依赖窗口边界）

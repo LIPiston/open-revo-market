@@ -7,7 +7,7 @@ OpenRevo（`open-revo.exe`）的第三方插件市场：宿主里的一个页签
 ## 安装
 
 ```powershell
-irm https://raw.githubusercontent.com/LIPiston/open-revo-market/main/_tools/install-market.ps1 | iex
+irm https://raw.githubusercontent.com/LIPiston/open-revo-market/main/tools/install-market.ps1 | iex
 ```
 
 装完打开 OpenRevo → 侧边栏【插件】页 → 右上角【刷新】→ 顶栏出现「插件市场」页签。
@@ -18,7 +18,7 @@ irm https://raw.githubusercontent.com/LIPiston/open-revo-market/main/_tools/inst
 python build_market.py --install    # 构建并装到 %APPDATA%\OpenRevo\plugins\plugin-market\
 ```
 
-`_tools/install-market.ps1` 还支持 `-Local`（用仓库里已入库的 `plugin-market\`）、`-From <目录>`、`-DryRun`、`-Repo owner/name`、`-Direct`（强制直连，不走加速）。
+`tools/install-market.ps1` 还支持 `-Local`（用仓库里已入库的 `plugin-market\`）、`-From <目录>`、`-DryRun`、`-Repo owner/name`、`-Direct`（强制直连，不走加速）。
 
 ## 三扇门
 
@@ -71,7 +71,7 @@ open-revo-market\
 │   └── *.py                    # 爬虫 / 覆写层 / 目录校验 / 测试
 ├── build_market.py             # 构建器（多文件产物 + 自检）
 ├── plugin-market\              # 市场构建产物（入库，可直接装）
-├── _tools\                     # 安装 / 验收 / 预览 / 出图
+├── tools\                      # 安装 / 验收 / 预览 / 出图
 └── docs\                       # 文档（见上面的三扇门）
 ```
 

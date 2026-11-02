@@ -18,7 +18,7 @@ open-revo-market\
 │   └── tests\                  # 覆写层单元测试
 ├── build_market.py             # 构建器（多文件产物 + 自检）
 ├── plugin-market\              # ★ 构建产物（入库，可直接装）
-├── _tools\                     # 安装 / 验收 / 预览 / 出图
+├── tools\                      # 安装 / 验收 / 预览 / 出图
 └── docs\                       # 文档（见根 README 的导航）
 ```
 
@@ -38,9 +38,11 @@ python build_market.py --install  # 构建并装到 %APPDATA%\OpenRevo\plugins\p
 
 **为什么可以外链**：宿主 0.9.5 实测 `tab` 插件的基准 URL 是插件目录，`<link rel=stylesheet>` / `<script src>` / 相对 `fetch()` 都能取到（`docs/host-contract.md` §实测：外部资源）。所以样式和逻辑不必再内联。构建期反过来断言「**只**引用 `market.css` 与 `market.js`」—— 多引一个文件或在 CSS 里写 `@import` 都会失败。
 
-**`manifest.json` 必须带 `window`**：缺了它，独立视窗用宿主默认的 240×320 且没有标题栏 —— 用户只能去任务栏结束宿主进程。构建期断言 `window.decorations === true` 与 `resizable === true`。
+**`manifest.json` 必须带 `window`，且照抄 ec-config 那套取值**（1180×820 / `decorations: true` / `resizable: true` / `skip_taskbar: false`）。缺 `decorations` ⇒ 宿主默认无边框 ⇒ 独立视窗关不掉，用户只能结束进程。构建期断言这几个字段齐全、且 `width >= 900`、`height >= 640`。完整对照实验见 [`host-contract.md`](host-contract.md) §独立视窗。
 
-`--check` 做的自检包括：产物五个文件齐全、`index.html` 只引用那两个资源、占位符已替换、`SEED` 已内联、`manifest.window` 可关窗、`market.js` 里没有硬编码宿主版本号（能力必须运行时探测）、`install_plugin_from_url` 的参数带 `id`+`url`+`archiveSubpath()`、以及实时发现不再有 `data-act="live"` 按钮且存在 `maybeAutoLive()`。
+> 改完 `window` 后若独立视窗**还是旧尺寸**，通常是宿主复用了一个没被销毁的旧窗口，不是配置没生效 —— 判别与解除办法见同一节「踩过的坑」。
+
+`--check` 做的自检包括：产物五个文件齐全、`index.html` 只引用那两个资源、占位符已替换、`SEED` 已内联、`manifest.window` 可关窗且尺寸够大、`market.js` 里没有硬编码宿主版本号（能力必须运行时探测；判据已排除内联目录，否则会把插件自己的 `version` 误判成宿主版本）、`install_plugin_from_url` 的参数带 `id`+`url`+`archiveSubpath()`、以及实时发现不再有 `data-act="live"` 按钮且存在 `maybeAutoLive()`。
 
 ## 目录与覆写层
 
@@ -82,12 +84,12 @@ E1–E15 各自管什么，见 [`review.md`](review.md) §四的表格。简单�
 
 ## 本地预览（等价宿主）
 
-`_tools/market-preview.html` 复刻宿主对 `tab` 插件的处理：iframe 的 sandbox 逐字照抄、`srcDoc` 注入、父窗口挂 `__TAURI_INTERNALS__` 模拟 Tauri 桥。
+`tools/market-preview.html` 复刻宿主对 `tab` 插件的处理：iframe 的 sandbox 逐字照抄、`srcDoc` 注入、父窗口挂 `__TAURI_INTERNALS__` 模拟 Tauri 桥。
 
 ```bash
 # 预览页要 fetch 产物，file:// 下会被 CORS 拒，所以起本地服务
 python -m http.server 8791
-# 打开 http://127.0.0.1:8791/_tools/market-preview.html?theme=cyber&host=new
+# 打开 http://127.0.0.1:8791/tools/market-preview.html?theme=cyber&host=new
 ```
 
 | 参数 | 作用 |
@@ -102,9 +104,9 @@ python -m http.server 8791
 出图：
 
 ```bash
-bash _tools/market-shots.sh        # 列表 cyber/mono、窄屏 cyber/mono、弹窗 cyber
-bash _tools/market-shots-modal.sh  # 只出弹窗（cyber/mono），停在弹窗上
-powershell -NoProfile -ExecutionPolicy Bypass -File _tools/host-shot.ps1 -Full  # 真实宿主窗口（只读）
+bash tools/market-shots.sh        # 列表 cyber/mono、窄屏 cyber/mono、弹窗 cyber
+bash tools/market-shots-modal.sh  # 只出弹窗（cyber/mono），停在弹窗上
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/host-shot.ps1 -Full  # 真实宿主窗口（只读）
 ```
 
 ## 验收闸
@@ -114,8 +116,8 @@ python build_market.py --check
 python market/overrides.py
 python market/validate_catalog.py market/catalog.json
 python -m pytest market/tests -q
-bash _tools/market-verify.sh cyber
-bash _tools/market-verify.sh mono
+bash tools/market-verify.sh cyber
+bash tools/market-verify.sh mono
 ```
 
 **PASS 才许交付。** 两种主题各跑一遍。
@@ -157,7 +159,7 @@ bash _tools/market-verify.sh mono
 | 「实时发现」（GitHub 搜索 API） | 直连 → 加速 |
 | 一键安装（宿主下载归档） | **默认直连**，弹窗里有「走 gh-proxy 加速」勾选框 |
 | 手动 `git clone` 备用命令 | 直接给加速地址（不通可去掉前缀） |
-| `_tools/install-market.ps1` | 走加速，**失败自动回退直连**；`-Direct` 强制直连 |
+| `tools/install-market.ps1` | 走加速，**失败自动回退直连**；`-Direct` 强制直连 |
 
 **一键安装为什么默认不加速**：加速后的归档根目录与直连一致（已实测，因此 `subpath` 语义不变，规则见 [`host-contract.md`](host-contract.md)）；但宿主是否接受 GitHub 之外的下载域名**尚未实测**。所以做成显式开关，并在弹窗里写明「若报安全策略错误，关掉这个开关用直连重试」—— 不把未验证的路径设成默认。
 
@@ -175,7 +177,7 @@ bash _tools/market-verify.sh mono
 ## 发布市场自己
 
 ```powershell
-irm https://raw.githubusercontent.com/LIPiston/open-revo-market/main/_tools/install-market.ps1 | iex
+irm https://raw.githubusercontent.com/LIPiston/open-revo-market/main/tools/install-market.ps1 | iex
 ```
 
 脚本拉 main 分支的 `plugin-market/`，剥掉归档的包装层后复制到 `%APPDATA%\OpenRevo\plugins\plugin-market\`，并**自校验**：`manifest.json` 的 `id`、`index.html` / `market.css` / `market.js` 三个文件都在、`index.html` 确实引着那两个文件，且 `css + js` 合计不少于 20 KB（少于就判失败）。已有旧版会被覆盖。
@@ -183,7 +185,7 @@ irm https://raw.githubusercontent.com/LIPiston/open-revo-market/main/_tools/inst
 直连 raw.githubusercontent 打不开时：
 
 ```powershell
-irm https://gh-proxy.com/https://raw.githubusercontent.com/LIPiston/open-revo-market/main/_tools/install-market.ps1 | iex
+irm https://gh-proxy.com/https://raw.githubusercontent.com/LIPiston/open-revo-market/main/tools/install-market.ps1 | iex
 ```
 
 | 参数 | 作用 |

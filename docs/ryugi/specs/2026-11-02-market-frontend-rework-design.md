@@ -94,6 +94,8 @@ tab 内嵌面板与「独立视窗运行」两条路径**都**成立。因此第
 - 产物入库：`plugin-market/` 仍要提交，`_tools/install-market.ps1 -Local` 依赖它。
 - 版本号 `1.2.0` → `1.3.0`（行为与产物结构都变了）。
 
+> 实施期修正（目录）：`_tools/` 在本轮一并改名为 `tools/`（去掉别扭的下划线前缀）。本节及 §4.5 里出现的 `_tools/...` 路径一律按 `tools/...` 理解。
+
 ## 4. 怎么改
 
 ### 4.1 布局（`market/src/market.css`）
@@ -149,9 +151,11 @@ tab 内嵌面板与「独立视窗运行」两条路径**都**成立。因此第
 
 ### 4.3 独立视窗（manifest）
 
+> 实施期修正：尺寸最终取 `1180×820`（与已上架插件 `ec-config` 逐字段对齐），不是这里最初写的 1120×780。实测见 [`docs/host-contract.md`](../../host-contract.md) §独立视窗。
+
 ```json
 "window": {
-  "width": 1120, "height": 780,
+  "width": 1180, "height": 820,
   "resizable": true, "decorations": true,
   "transparent": false, "always_on_top": false, "skip_taskbar": false
 }
@@ -160,6 +164,7 @@ tab 内嵌面板与「独立视窗运行」两条路径**都**成立。因此第
 - `decorations: true` 是「关不掉」的正解（原生关闭按钮）。
 - `resizable: true` 让用户自己拉；布局在 4.1 之后本就自适应。
 - `skip_taskbar: false` 让独立视窗能在任务栏/Alt+Tab 里找到 —— 否则关不掉时更难找回。
+- `always_on_top: false` 必须显式写：手册默认 `true`，省略会变成置顶窗。
 
 ### 4.4 实时发现自动化（`market/src/market.js`）
 

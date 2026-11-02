@@ -5,8 +5,10 @@
  * 宿主约束（详见 docs/host-contract.md）：
  *  1. `tab` 插件跑在 `srcDoc` iframe（sandbox=allow-scripts allow-forms allow-same-origin），
  *     与宿主**同源** → 可访问 window.parent.__TAURI_INTERNALS__.invoke 与父文档 DOM。
- *     「独立视窗运行」弹出的窗口里**同样是 iframe**（`about:srcdoc#/widget/<id>`），
- *     宿主桥一样可用；但那边父文档没有 data-theme，主题要降级（见 syncTheme）。
+ *     宿主原生的「独立视窗运行」弹出的窗口里**同样是 iframe**（`about:srcdoc#/widget/<id>`），
+ *     宿主桥一样可用，安装/卸载/启停在窗内都能用。
+ *     与 tab 内嵌的唯一差别：那边父文档没有 data-theme，主题读不到就降级为 cyber
+ *     （见 syncTheme）。窗口几何由 manifest.window 决定，见 docs/host-contract.md §独立视窗。
  *  2. 该 iframe **没有** allow-downloads / allow-popups → 下载与 window.open 全部被拦，
  *     所以**下载、解压、落盘全部交给宿主**，市场只发一条 IPC。
  *  3. 宿主能力**按运行时探测**，不按版本号猜：

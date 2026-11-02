@@ -8,7 +8,7 @@
     index.html     骨架（只外链 market.css / market.js）
     market.css     样式
     market.js      应用逻辑（内联离线目录作为 SEED）
-    manifest.json  清单（含 window 声明 —— 缺了它独立视窗只有 240x320 且无标题栏）
+    manifest.json  清单（含 window 声明 —— 与 ec-config 同款，独立视窗才关得掉）
     README.md      给装进宿主后的终端用户看
 
 为什么是外链而不是单文件：宿主对 `tab` 插件的 iframe 用 srcDoc 注入，
@@ -37,8 +37,19 @@ OUT = ROOT / "plugin-market"
 
 PLUGIN_ID = "plugin-market"
 
-# 独立视窗：decorations 是「关得掉」的唯一来源 —— 没有原生标题栏时
-# 用户只能去任务栏结束宿主进程。skip_taskbar:false 让它在 Alt+Tab 里也能找回。
+# 独立视窗：照抄已上架插件 ec-config 的那套取值（1180x820 / decorations / resizable）。
+#
+# 为什么必须是这几个字段：
+#   * `decorations: true` 是「关得掉」的唯一来源 —— 宿主默认无边框，
+#     没有原生标题栏时用户只能去任务栏结束宿主进程；
+#   * `resizable: true` 让用户自己能拖；布局已用 container query 自适应；
+#   * `skip_taskbar: false` 让它在任务栏 / Alt+Tab 里找得到 —— 关不掉时还能找回。
+#
+# 已知限制（详见 docs/host-contract.md §独立视窗）：
+#   * 窗口几何**被宿主持久化**：改这个值只对**新建**的窗口生效，
+#     已经存在过的窗口仍保持旧尺寸，要等宿主清掉缓存或换 plugin id；
+#   * 关闭弹出窗可能触发宿主 tao 的 `cannot move state from Destroyed` panic
+#     （宿主自身的长期缺陷，2026-10 起 crash.log 里 25 次，与本插件无关）。
 MANIFEST = {
     "id": PLUGIN_ID,
     "name": "插件市场",
@@ -47,12 +58,16 @@ MANIFEST = {
     "description": "浏览 GitHub 上带 openrevo-plugin topic 的第三方插件，宿主支持时一键安装/卸载。",
     "plugin_type": "tab",
     "entry": "index.html",
+    # 与 ec-config 保持一致的窗口几何。
+    # `always_on_top` 显式写 false：官方手册说它的默认值是 **true**，
+    # 省略就成了置顶窗口，会一直压在其他应用上面。ec-config 省了它，
+    # 但置顶是用户会立刻反感的副作用，这里不跟着省。
     "window": {
-        "width": 1120,
-        "height": 780,
+        "width": 1180,
+        "height": 820,
+        "transparent": False,
         "resizable": True,
         "decorations": True,
-        "transparent": False,
         "always_on_top": False,
         "skip_taskbar": False,
     },
@@ -178,7 +193,7 @@ def sanity_checks(art: dict[str, str]) -> list[str]:
             elif data.get("source") == "builtin-seed":
                 problems.append("SEED 仍是源码里的内置种子，market/catalog.json 没有被内联")
 
-    # 5) manifest 必须有能关窗的 window 声明
+    # 5) manifest 的 window 必须能关窗、能拉大
     try:
         man = json.loads(art["manifest.json"])
     except Exception as e:  # noqa: BLE001
@@ -186,12 +201,24 @@ def sanity_checks(art: dict[str, str]) -> list[str]:
         man = {}
     win = man.get("window")
     if not isinstance(win, dict):
-        problems.append("manifest 缺少 window 声明 —— 独立视窗会用默认 240x320 且无标题栏（关不掉）")
+        problems.append("manifest 缺少 window 声明 —— 独立视窗会用宿主默认 240x320 且无标题栏（关不掉）")
     else:
         if win.get("decorations") is not True:
             problems.append("manifest.window.decorations 必须为 true —— 否则独立视窗没有关闭按钮")
         if win.get("resizable") is not True:
             problems.append("manifest.window.resizable 应为 true（布局已自适应，允许用户拉伸）")
+        if win.get("skip_taskbar") is not False:
+            problems.append("manifest.window.skip_taskbar 应为 false —— 关不掉时还能在任务栏找回")
+        if win.get("always_on_top") is not False:
+            problems.append(
+                "manifest.window.always_on_top 必须显式为 false —— 手册默认值是 true，"
+                "省略会让独立视窗变成置顶窗，一直压在其他应用上面"
+            )
+        if win.get("width", 0) < 900 or win.get("height", 0) < 640:
+            problems.append(
+                f"manifest.window 太小（{win.get('width')}x{win.get('height')}）"
+                "—— 独立视窗至少要 900x640，否则卡片挤成一列"
+            )
     if man.get("plugin_type") != "tab":
         problems.append("plugin_type 必须是 tab")
 
@@ -246,8 +273,11 @@ def sanity_checks(art: dict[str, str]) -> list[str]:
     elif not re.search(r"subpath\s*:\s*archiveSubpath\(", js):
         problems.append("参数对象里的 subpath 没有走 archiveSubpath()")
 
-    # 绝不能把「本版宿主没有安装接口」这类判断写死成版本号
-    if re.search(r"v?0\.9\.1[^0-9]", js):
+    # 绝不能把「本版宿主没有安装接口」这类判断写死成版本号。
+    # 必须排除内联目录（SEED）—— 那里面是**插件自己的** version 字段
+    # （ec-config 就是 0.9.1），拿它判「硬编码宿主版本」是误报。
+    code_only = SEED_DECL.sub("const SEED = {};", js, count=1)
+    if re.search(r"v?0\.9\.1[^0-9]", code_only):
         problems.append("market.js 里仍硬编码宿主版本号 —— 能力必须运行时探测")
 
     # 7) 实时发现必须自动触发、且 UI 上不再有那个按钮

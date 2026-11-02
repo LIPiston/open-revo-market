@@ -69,19 +69,53 @@
 ⇒ `tab` 插件的产物**可以多文件**，`market.css` / `market.js` 外链即可。唯一的约束是路径
 必须是相对插件目录的，且构建期要断言「只引用预期的那几个」。
 
-### 实测：独立视窗的几何与上下文
+### 独立视窗：照抄 ec-config 的配置
 
-| 项 | 结论 |
-|---|---|
-| 窗口尺寸 | 由 `manifest.window.width/height` 决定（逻辑像素） |
-| **没写 `window`** | 宿主默认 **240×320 且无标题栏 ⇒ 关不掉**，只能结束宿主进程 |
-| `decorations: true` | 有原生标题栏（最小化/最大化/关闭）。**这是「关得掉」的唯一来源** |
-| `resizable: true` | 可以拖拽缩放 |
-| `skip_taskbar: false` | 出现在任务栏 / Alt+Tab，关不掉时还能找回 |
-| 重复点「独立视窗运行」 | 宿主保持单实例（幂等），不会真的开多个窗 |
-| 宿主桥 | ✅ 可用，`get_plugin_host_capabilities` 返回同上 |
-| `localStorage` | ✅ 与 tab 内嵌共享（跨上下文缓存可用） |
-| `parent.document` 的 `data-theme` | ❌ 取不到 —— 独立视窗没有那个父文档。主题必须自带兜底 |
+**结论：`manifest.window` 是有效的，照抄已上架插件 ec-config 的那套取值即可。**
+
+「独立视窗运行」按钮由宿主**原生渲染**（官方手册：无论 `widget` 还是 `tab`，宿主都在页签右上角提供该按钮），manifest 没有字段能隐藏它 —— 但这个功能本身是可以正常用的，前提是 `window` 写对。
+
+本插件采用与 `ec-config` 逐字段一致的配置：
+
+```json
+"window": {
+  "width": 1180, "height": 820,
+  "transparent": false, "resizable": true,
+  "decorations": true, "always_on_top": false, "skip_taskbar": false
+}
+```
+
+> `always_on_top` 是本插件**额外**写的：官方手册说它默认 `true`，而 `ec-config` 省略了它。
+> 置顶会让独立视窗一直压在其他应用上面，是用户会立刻反感的副作用，所以显式写 `false`。
+
+#### 实测对照（同一台机器、同一宿主 0.9.5）
+
+| 插件 | `window` 配置 | 独立视窗实测 |
+|---|---|---|
+| `ec-config`（已上架参照） | 1180×820 / decorations | **1195×857** physical |
+| 本插件（配好后） | 1180×820 / decorations | **1774×1277** physical ≈ **1183×851** CSS |
+
+两者尺寸一致（差值来自窗口阴影与 DPI 取整）。窗口有原生标题栏，点【关闭】后窗口消失、主窗存活、**未触发 panic**。
+
+#### 各字段的作用
+
+| 字段 | 作用 | 缺失时 |
+|---|---|---|
+| `decorations: true` | 原生标题栏（最小化/最大化/关闭） | 无边框 ⇒ **关不掉**，只能结束宿主进程 |
+| `resizable: true` | 允许拖拽缩放 | 固定死尺寸；布局已用 container query 自适应 |
+| `skip_taskbar: false` | 出现在任务栏 / Alt+Tab | 关不掉时更难找回 |
+| `always_on_top: false` | 不置顶 | 手册默认 `true` ⇒ 窗口一直压在其他应用上面 |
+| `width` / `height` | 逻辑像素，宿主按 DPI 换算 | 宿主默认 **240×320** ⇒ 卡片挤成一列 |
+
+#### 踩过的坑：窗口尺寸会「看起来没生效」
+
+改完 manifest 后如果独立视窗**还是旧尺寸**，先别怀疑配置 —— 实测发现宿主会**复用同 id 的既有窗口**，且该窗口可能已经在关闭流程里变成不可见但未销毁的残留（`IsWindowVisible=false`、CUA 仍能枚举到）。
+
+判别方法：换一个**全新 plugin id** 的同构副本再开一次。若新 id 拿到的是 1180×820，说明配置本身没问题，是旧窗口没被销毁。
+
+解除办法：把宿主进程全部退出（`tasklist` 确认没有 `open-revo.exe`）后重新启动。仅重启宿主不一定够 —— 残留窗口可能被新进程按 id 重新关联。
+
+> 另有一项与配置无关的宿主缺陷：`%APPDATA%\OpenRevo\crash.log` 里 `tao-0.35.3 runner.rs:371 cannot move state from Destroyed`，2026-10-13 起共 25 次。**配置正确时关闭窗口不会触发它**；它出现在窗口状态已经异常（例如强杀进程后）的场景，属宿主自身问题。
 
 ### 实测：`tab` iframe 能做什么
 

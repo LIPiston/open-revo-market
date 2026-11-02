@@ -8,7 +8,7 @@
 # 为什么跑两条宿主路径：市场的行为由 get_plugin_host_capabilities 决定，
 # 能力齐全时走一键安装、缺安装 IPC 时走复制命令。两条都得验收，只测一条等于漏测。
 #
-#   用法： bash _tools/market-verify.sh [theme] [host]
+#   用法： bash tools/market-verify.sh [theme] [host]
 #          theme = cyber|mono|light   （默认 cyber）
 #          host  = new|old            （默认 new；省略时两条都跑）
 #   退出码 0 = PASS，非 0 = FAIL（不许交付）
@@ -43,7 +43,7 @@ trap 'kill $SRV 2>/dev/null' EXIT
 
 # 等端口就绪
 for _ in $(seq 1 40); do
-  if curl -s -m 2 -o /dev/null "http://127.0.0.1:$PORT/_tools/market-preview.html"; then break; fi
+  if curl -s -m 2 -o /dev/null "http://127.0.0.1:$PORT/tools/market-preview.html"; then break; fi
   sleep 0.25
 done
 
@@ -57,7 +57,7 @@ run_one() {
   local tag="$THEME-$host$suffix"
   # catalog=local：把市场对在线目录的 fetch 劫持到仓库里的 market/catalog.json。
   # 不这样做，验收测的是 GitHub 上的旧目录 —— 本地改了目录但还没 push 时等于没测。
-  local page="http://127.0.0.1:$PORT/_tools/market-preview.html?theme=$THEME&host=$host&catalog=local"
+  local page="http://127.0.0.1:$PORT/tools/market-preview.html?theme=$THEME&host=$host&catalog=local"
   if [ "$cat_rel" != "../market/catalog.json" ]; then
     page="$page&catalogPath=$cat_rel"
   fi

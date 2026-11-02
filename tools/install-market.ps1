@@ -6,7 +6,7 @@
 # 下载默认走 gh-proxy.com 加速（国内直连 GitHub 常常超时）；加速失败会自动回退直连。
 #
 # 用法：
-#   powershell -NoProfile -ExecutionPolicy Bypass -File _tools\install-market.ps1
+#   powershell -NoProfile -ExecutionPolicy Bypass -File tools\install-market.ps1
 #   ... -Local            从本仓库已入库的 plugin-market\ 安装（离线、可控）
 #   ... -From <目录>      从指定目录安装（一般用于本地构建后验证）
 #   ... -DryRun           只打印将要做什么，不下载、不写盘
@@ -18,7 +18,7 @@
 #
 # 注意 1：本文件是 UTF-8 带 BOM。Windows PowerShell 5.1 会把无 BOM 的 .ps1 按系统 ANSI
 #         （中文机器上是 GBK）解读，UTF-8 中文可能吞掉后面的引号，导致整段语法报错。
-#         改完必须复验：head -c3 _tools\install-market.ps1 | od -An -tx1 得到 ef bb bf。
+#         改完必须复验：head -c3 tools\install-market.ps1 | od -An -tx1 得到 ef bb bf。
 # 注意 2：不用 param()，改用 $args —— 经 MSYS 调 powershell -File 时显式参数会被吃掉。
 
 $ErrorActionPreference = 'Stop'

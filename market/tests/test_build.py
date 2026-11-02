@@ -6,7 +6,8 @@
     不再是单文件内联 —— 宿主实测能加载外链资源（见 docs/host-contract.md）；
   * index.html 只引用 market.css 与 market.js 两个相对资源，别的一律不许有；
   * 目录仍然被内联进 market.js 作为离线兜底（`const SEED`）；
-  * manifest 的 `window` 声明存在且可关窗（decorations/resizable）。
+  * manifest 的 `window` 必须照抄 ec-config 那套（1180x820 / decorations / resizable），
+    否则独立视窗是宿主默认的 240x320 无边框、关不掉。
 
 不测 IPC 断言细节（那是 sanity_checks 的领域，由 `--check` 在真实产物上跑）。
 """
@@ -75,13 +76,22 @@ def test_embedded_seed_matches_catalog_file(artifacts):
     assert [p["id"] for p in data["plugins"]] == [p["id"] for p in cat["plugins"]]
 
 
-def test_manifest_declares_window_that_can_be_closed(artifacts):
+def test_manifest_declares_ec_config_style_window(artifacts):
+    """manifest 的 window 必须照抄 ec-config 那套取值。
+
+    ec-config 是已上架、独立视窗可用的参照实现：1180x820 / decorations / resizable。
+    缺 `decorations` ⇒ 宿主默认无边框 ⇒ 用户关不掉，只能结束进程。
+    """
     man = json.loads(artifacts["manifest.json"])
     win = man.get("window")
-    assert isinstance(win, dict), "manifest 必须有 window 声明，否则弹出视窗用宿主默认 240x320 且无标题栏"
+    assert isinstance(win, dict), "manifest 必须有 window 声明，否则独立视窗是宿主默认的 240x320 无边框"
     assert win.get("decorations") is True, "没有原生标题栏 ⇒ 独立视窗关不掉"
-    assert win.get("resizable") is True
-    assert win.get("width", 0) >= 900 and win.get("height", 0) >= 640
+    assert win.get("resizable") is True, "布局已自适应，应允许用户拉伸"
+    assert win.get("skip_taskbar") is False, "要让它在任务栏/Alt+Tab 里找得到"
+    assert win.get("always_on_top") is False, "手册默认 true —— 省略就成置顶窗，会压在其他应用上面"
+    assert win.get("width", 0) >= 900 and win.get("height", 0) >= 640, (
+        f"窗口太小会挤成一列：{win.get('width')}x{win.get('height')}"
+    )
 
 
 def test_manifest_keeps_plugin_type_tab(artifacts):
@@ -106,11 +116,21 @@ def test_sanity_flags_stray_external_ref(artifacts):
 
 
 def test_sanity_flags_missing_window(artifacts):
+    """自检必须真的会失败：去掉 window 就得报出来。"""
     man = json.loads(artifacts["manifest.json"])
     man.pop("window", None)
     broken = dict(artifacts, **{"manifest.json": json.dumps(man, ensure_ascii=False)})
     problems = build_market.sanity_checks(broken)
     assert any("window" in p for p in problems), problems
+
+
+def test_sanity_flags_tiny_window(artifacts):
+    """窗口太小（如宿主默认 240x320）也必须报出来 —— 那正是「还是太小」的形态。"""
+    man = json.loads(artifacts["manifest.json"])
+    man["window"] = dict(man["window"], width=240, height=320)
+    broken = dict(artifacts, **{"manifest.json": json.dumps(man, ensure_ascii=False)})
+    problems = build_market.sanity_checks(broken)
+    assert any("太小" in p for p in problems), problems
 
 
 def test_sanity_flags_unreplaced_seed(artifacts):

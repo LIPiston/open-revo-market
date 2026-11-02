@@ -3,8 +3,8 @@
 # 指定修订的产物与当前产物，在等价宿主里各截一张，供人眼核对界面文案。
 #
 # 用法：
-#   bash _tools/cap-wording-shots.sh                 # 默认对比 e2377dd^（文案改动前）
-#   bash _tools/cap-wording-shots.sh <rev>           # 对比指定的历史产物
+#   bash tools/cap-wording-shots.sh                 # 默认对比 e2377dd^（文案改动前）
+#   bash tools/cap-wording-shots.sh <rev>           # 对比指定的历史产物
 #
 # 输出落在 _shots/capwording/，不进 _shots 之外的任何地方。
 set -u
@@ -17,11 +17,11 @@ PORT_BEFORE="${PORT_BEFORE:-8793}"
 PORT_AFTER="${PORT_AFTER:-8794}"
 
 rm -rf "$BEFORE"
-mkdir -p "$OUT" "$BEFORE/_tools" "$BEFORE/plugin-market" "$BEFORE/market"
+mkdir -p "$OUT" "$BEFORE/tools" "$BEFORE/plugin-market" "$BEFORE/market"
 
 # 改动前的产物与预览页副本。预览页要一起取旧版，否则「宿主」本身变了就不是单变量对比。
 git -C "$ROOT" show "$BASE_REV:plugin-market/index.html" > "$BEFORE/plugin-market/index.html"
-cp "$ROOT/_tools/market-preview.html" "$BEFORE/_tools/market-preview.html"
+cp "$ROOT/tools/market-preview.html" "$BEFORE/tools/market-preview.html"
 
 # 合成目录：capabilities 三态各一条。只落在 _shots/，不进 market/catalog.json。
 python - "$ROOT/market/catalog.json" "$OUT/cap-catalog.json" <<'PY'
@@ -64,7 +64,7 @@ shoot() { # name root port url-query
     --user-data-dir="$(cygpath -w "$prof")" --virtual-time-budget=9000 \
     --window-size=1180,900 \
     --screenshot="$(cygpath -w "$OUT/$name.png")" \
-    "http://127.0.0.1:$port/_tools/market-preview.html?theme=cyber&nodiag=1&catalog=local$query" \
+    "http://127.0.0.1:$port/tools/market-preview.html?theme=cyber&nodiag=1&catalog=local$query" \
     >/dev/null 2>&1
   echo "  $name.png ($(stat -c%s "$OUT/$name.png" 2>/dev/null || echo 0) bytes)"
 }
@@ -72,8 +72,8 @@ shoot() { # name root port url-query
 S1=$(serve "$BEFORE" "$PORT_BEFORE"); S2=$(serve "$ROOT" "$PORT_AFTER")
 trap 'kill $S1 $S2 2>/dev/null' EXIT
 for _ in $(seq 1 40); do
-  curl -s -m 2 -o /dev/null "http://127.0.0.1:$PORT_BEFORE/_tools/market-preview.html" && \
-  curl -s -m 2 -o /dev/null "http://127.0.0.1:$PORT_AFTER/_tools/market-preview.html" && break
+  curl -s -m 2 -o /dev/null "http://127.0.0.1:$PORT_BEFORE/tools/market-preview.html" && \
+  curl -s -m 2 -o /dev/null "http://127.0.0.1:$PORT_AFTER/tools/market-preview.html" && break
   sleep 0.25
 done
 

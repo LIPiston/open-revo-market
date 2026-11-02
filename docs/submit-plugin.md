@@ -55,7 +55,7 @@ gh repo edit --add-topic openrevo-plugin
 | `permissions` | 权限声明。**宿主不读它做任何拦截**，它只是给用户看的自述 |
 | `telemetry` | 遥测声明。同为自述 |
 | `service` | 伴随服务的配置（`executable` / `args` / `elevated` / `auto_start` / `auto_stop` / `port` / `health_url` / `description`） |
-| `window` | 窗口几何：`width` / `height` / `resizable` / `decorations` / `transparent` / `always_on_top` / `skip_taskbar`。**`tab` 插件也读它** —— 不写的话「独立视窗运行」会用宿主默认的 240×320 **且没有标题栏，用户关不掉**。见下面「一定要写 `window`」 |
+| `window` | 窗口几何：`width` / `height` / `resizable` / `decorations` / `transparent` / `always_on_top` / `skip_taskbar`。**`tab` 插件必须写** —— 不写时独立视窗是宿主默认的 240×320、无边框、关不掉。见下面「一定要写 `window`」 |
 | `shortcuts` / `watchers` | 快捷键与监听规则，元素需带 `id` |
 | `theme_css` / `background_css` / `image` | 皮肤、背景、图片资源 |
 
@@ -70,19 +70,23 @@ gh repo edit --add-topic openrevo-plugin
 
 ### 一定要写 `window`
 
-`tab` 插件（以及 `widget`）都可以被用户「独立视窗运行」弹出成单独窗口。没写 `window` 时宿主用默认的 **240×320、无边框**，表现是：窗口又小又挤，而且**没有关闭按钮** —— 用户只能去任务栏结束宿主进程。
+「独立视窗运行」按钮由宿主**原生渲染**（官方手册：无论 `widget` 还是 `tab`，宿主都在页签右上角提供该按钮），manifest 没有字段能关掉这个按钮。但 `window` 决定那个窗口**长什么样、关不关得掉**：
 
 ```json
 "window": {
-  "width": 1120, "height": 780,
-  "resizable": true, "decorations": true,
-  "transparent": false, "always_on_top": false, "skip_taskbar": false
+  "width": 1180, "height": 820,
+  "transparent": false, "resizable": true,
+  "decorations": true, "always_on_top": false, "skip_taskbar": false
 }
 ```
 
-- `decorations: true` 是「关得掉」的**唯一**来源；
+- `decorations: true` 是「关得掉」的**唯一**来源 —— 不写就是无边框窗口，用户只能结束宿主进程；
+- `width` / `height` 用逻辑像素；不写是宿主默认的 **240×320**，卡片会挤成一列；
+- `always_on_top: false` **必须显式写** —— 手册默认值是 `true`，省略就成了置顶窗口，一直压在其他应用上面；
 - `skip_taskbar: false` 让它在 Alt+Tab 里找得到；
-- 布局要能自适应宽度，因为 `resizable: true` 之后用户会自己拖 —— 用 container query 而不是只写视口 `@media`（面板里的宽度不等于视口宽度）。
+- 布局要能自适应宽度（`resizable` 之后用户会自己拖）—— 用 container query，别只写视口 `@media`。
+
+上面这组取值来自已上架插件 `ec-config`，实测可开能关。**写完如果发现还是旧尺寸**，多半是宿主复用了没销毁的旧窗口，不是你配错了 —— 判别方法见 [`host-contract.md`](host-contract.md) §独立视窗「踩过的坑」。
 
 ### 产物可以多文件，但单文件最保险
 
