@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-11-01T09:13:11+00:00",
+  "generatedAt": "2026-11-01T20:29:03+00:00",
   "topic": "openrevo-plugin",
-  "count": 2,
+  "count": 3,
   "plugins": [
     {
       "id": "plugin-market",
@@ -13,9 +13,9 @@
       "repo": "LIPiston/open-revo-market",
       "subpath": "plugin-market",
       "branch": "main",
-      "commit": "2b6f05c044eb38e8f15626baf023f32b5e2ff767",
+      "commit": "3b9f66345d151c4a4d6fbe67890f0987f5f79aef",
       "stars": 0,
-      "updatedAt": "2026-11-01T02:12:18Z",
+      "updatedAt": "2026-11-01T16:00:31Z",
       "license": null,
       "unreviewed": false,
       "capabilities": null,
@@ -33,6 +33,57 @@
       "watchers": null,
       "window": null,
       "telemetry": null,
+      "theme_css": null,
+      "background_css": null,
+      "image": null
+    },
+    {
+      "id": "ec-config",
+      "name": "EC配置刷写插件",
+      "version": "0.9.1",
+      "author": "VegQwo",
+      "plugin_type": "tab",
+      "description": "直接读写 Uniwill/Tongfang/AiStone 的 EC 配置。野狗汤姆猫使用自动扫码气不气",
+      "repo": "VegQwo/ec-config",
+      "subpath": "",
+      "branch": "main",
+      "commit": "31d9ba31f73e68c6e6f20fae946afaec462368b2",
+      "stars": 0,
+      "updatedAt": "2026-11-01T12:23:07Z",
+      "license": "MIT",
+      "unreviewed": false,
+      "capabilities": null,
+      "topics": [
+        "openrevo-plugin"
+      ],
+      "homepage": null,
+      "entry": "index.html",
+      "target_slot": null,
+      "slot_height": null,
+      "min_host_version": "0.9.3",
+      "permissions": [],
+      "service": {
+        "executable": "agent/shutdown_helper.exe",
+        "elevated": false,
+        "auto_start": true,
+        "auto_stop": true,
+        "health_url": "http://127.0.0.1:18946/api/ping",
+        "port": 18946,
+        "description": "EC 配置关机辅助服务（仅用于断电重启 EC 固件）"
+      },
+      "shortcuts": null,
+      "watchers": null,
+      "window": {
+        "width": 1180,
+        "height": 820,
+        "transparent": false,
+        "resizable": true,
+        "decorations": true,
+        "skip_taskbar": false
+      },
+      "telemetry": {
+        "enabled": false
+      },
       "theme_css": null,
       "background_css": null,
       "image": null
