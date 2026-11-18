@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-11-18T04:15:40+00:00",
+  "generatedAt": "2026-11-18T13:04:59+00:00",
   "topic": "openrevo-plugin",
-  "count": 3,
+  "count": 5,
   "plugins": [
     {
       "id": "plugin-market",
@@ -13,9 +13,9 @@
       "repo": "LIPiston/open-revo-market",
       "subpath": "plugin-market",
       "branch": "main",
-      "commit": "5f7b3183cf7cf1bc901765721ab952427f368bbb",
+      "commit": "13014fed633cd60064aadbf20328069c1df77936",
       "stars": 0,
-      "updatedAt": "2026-11-17T22:18:29Z",
+      "updatedAt": "2026-11-18T04:15:41Z",
       "license": null,
       "unreviewed": false,
       "capabilities": null,
@@ -92,6 +92,113 @@
       "telemetry": {
         "enabled": false
       },
+      "theme_css": null,
+      "background_css": null,
+      "image": null
+    },
+    {
+      "id": "pbo-tuner",
+      "name": "PBO 精准调校 (SMU Debug)",
+      "version": "2.0.0",
+      "author": "linyuhc001",
+      "plugin_type": "tab",
+      "description": "仿 SMUDebugTool 的 AMD Ryzen PBO 精准调校中心。插件自带伴随服务，通过 PawnIO 内核驱动直连 SMU（RSMU mailbox），支持每核 Curve Optimizer 降压、全核 CO、PBO Scalar、FMax 睿频上限调整与 SMU 版本/PM 表读取。所有参数直接作用于处理器固件，无需进入 BIOS，也不依赖宿主源码。",
+      "repo": "linyuhc001/openrevo-plugins",
+      "subpath": "pbo-tuner",
+      "branch": "main",
+      "commit": "ce86ffc27f659dec8e58190c26fea9801765940e",
+      "stars": 0,
+      "updatedAt": "2026-11-18T05:02:09Z",
+      "license": null,
+      "unreviewed": true,
+      "capabilities": null,
+      "topics": [
+        "openrevo",
+        "openrevo-plugin",
+        "plugins"
+      ],
+      "homepage": "https://github.com/faintonce/open-revo",
+      "entry": "index.html",
+      "target_slot": null,
+      "slot_height": null,
+      "min_host_version": "0.9.7",
+      "permissions": [
+        "hardware:tuning",
+        "power:control"
+      ],
+      "service": {
+        "executable": "sidecar/pbo-service.exe",
+        "elevated": true,
+        "auto_start": true,
+        "auto_stop": true,
+        "health_url": "http://127.0.0.1:19110/api/health",
+        "port": 19110
+      },
+      "shortcuts": null,
+      "watchers": null,
+      "window": {
+        "width": 1024,
+        "height": 720,
+        "transparent": false,
+        "always_on_top": false,
+        "resizable": true,
+        "decorations": true,
+        "skip_taskbar": false
+      },
+      "telemetry": null,
+      "theme_css": null,
+      "background_css": null,
+      "image": null
+    },
+    {
+      "id": "process-manager",
+      "name": "进程管理",
+      "version": "1.6.0",
+      "author": "linyuhc001",
+      "plugin_type": "tab",
+      "description": "进程 / 连接与端口 / 文件占用 三合一系统检视插件，基于本地伴随服务 process-service（Restart Manager 通道），守护进程管理员上下文直连，支持结束进程树与强制断连。",
+      "repo": "linyuhc001/openrevo-plugins",
+      "subpath": "process-manager",
+      "branch": "main",
+      "commit": "ce86ffc27f659dec8e58190c26fea9801765940e",
+      "stars": 0,
+      "updatedAt": "2026-11-18T05:02:09Z",
+      "license": null,
+      "unreviewed": true,
+      "capabilities": null,
+      "topics": [
+        "openrevo",
+        "openrevo-plugin",
+        "plugins"
+      ],
+      "homepage": "https://github.com/faintonce/open-revo",
+      "entry": "index.html",
+      "target_slot": null,
+      "slot_height": null,
+      "min_host_version": "0.9.4",
+      "permissions": [
+        "storage"
+      ],
+      "service": {
+        "executable": "sidecar/process-service.exe",
+        "elevated": true,
+        "auto_start": true,
+        "auto_stop": true,
+        "health_url": "http://127.0.0.1:19100/api/health",
+        "port": 19100
+      },
+      "shortcuts": null,
+      "watchers": null,
+      "window": {
+        "width": 1024,
+        "height": 720,
+        "transparent": false,
+        "always_on_top": false,
+        "resizable": true,
+        "decorations": true,
+        "skip_taskbar": false
+      },
+      "telemetry": null,
       "theme_css": null,
       "background_css": null,
       "image": null
